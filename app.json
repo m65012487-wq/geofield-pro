@@ -18,7 +18,8 @@
       "bundleIdentifier": "com.geofieldpro.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "GeoField Pro использует геолокацию для съёмки точек.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "GeoField Pro использует геолокацию для съёмки точек."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "GeoField Pro использует геолокацию для съёмки точек.",
+        "NSBluetoothAlwaysUsageDescription": "GeoField Pro подключается к GNSS-приёмнику по Bluetooth."
       }
     },
     "android": {

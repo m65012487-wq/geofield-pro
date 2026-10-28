@@ -1,0 +1,117 @@
+name: Unsigned IPA
+
+# Неподписанный .ipa для подписи на устройстве (eSign, Sideloadly и т.п.),
+# как в Noor. Нативного проекта в репозитории нет — его разворачивает prebuild.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: "Bundle ID (в eSign его ещё можно поменять при подписи)"
+        type: string
+        default: com.geofieldpro.app
+
+jobs:
+  ipa:
+    name: Неподписанная сборка
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Выбрать Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci --no-audit --no-fund
+
+      - name: Проверить типы
+        run: npx tsc --noEmit -p .
+
+      - name: Подставить bundle ID
+        env:
+          BUNDLE_ID: ${{ inputs.bundle_id }}
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 - <<'PY'
+          import json, os
+
+          with open("app.json", encoding="utf-8") as file:
+              config = json.load(file)
+          config["expo"]["ios"]["bundleIdentifier"] = os.environ["BUNDLE_ID"]
+          with open("app.json", "w", encoding="utf-8") as file:
+              json.dump(config, file, ensure_ascii=False, indent=2)
+          print("bundleIdentifier:", os.environ["BUNDLE_ID"])
+          PY
+
+      - name: Сгенерировать нативный проект
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Собрать архив без подписи
+        run: |
+          set -euo pipefail
+          SCHEME=$(basename "$(ls -d ios/*.xcworkspace | head -1)" .xcworkspace)
+          echo "Схема: $SCHEME"
+          set +e
+          xcodebuild archive \
+            -workspace "ios/$SCHEME.xcworkspace" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" > build.log 2>&1
+          STATUS=$?
+          set -e
+          grep -E "error:|\*\* ARCHIVE" build.log | head -60 || true
+          tail -30 build.log
+          exit $STATUS
+
+      - name: Упаковать .ipa
+        run: |
+          set -euo pipefail
+          APP=$(ls -d build/App.xcarchive/Products/Applications/*.app | head -1)
+          echo "Приложение: $APP"
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/
+          cd build
+          rm -f GeoFieldPro-unsigned.ipa
+          zip -qry GeoFieldPro-unsigned.ipa Payload
+          cd ..
+          ls -lh build/GeoFieldPro-unsigned.ipa
+
+      - name: Проверить содержимое
+        run: |
+          set -euo pipefail
+          APP=$(ls -d build/Payload/*.app | head -1)
+          for key in CFBundleIdentifier CFBundleExecutable CFBundleShortVersionString MinimumOSVersion NSBluetoothAlwaysUsageDescription; do
+            printf '%s: ' "$key"
+            /usr/libexec/PlistBuddy -c "Print :$key" "$APP/Info.plist" || echo "—"
+          done
+          ls "$APP" | grep -iE "main.jsbundle|\.hbc" || echo "ВНИМАНИЕ: бандл не найден"
+          du -sh build/GeoFieldPro-unsigned.ipa
+
+      - name: Выложить .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeoFieldPro-unsigned-ipa
+          path: build/GeoFieldPro-unsigned.ipa
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Лог сборки при ошибке
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, TextInput, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { colors, space, font, radius } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
@@ -32,7 +32,13 @@ export default function ReceiverScreen() {
     const ok = await ensureBtPermission();
     setDevices(ok ? bondedDevices() : []);
   }, []);
-  useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
+  // на iOS список — это поиск BLE рядом, он пополняется по ходу, поэтому перечитываем раз в 2 с
+  useFocusEffect(useCallback(() => {
+    refresh();
+    if (Platform.OS !== 'ios') return;
+    const t = setInterval(() => { if (receiverAvailable) setDevices(bondedDevices()); }, 2000);
+    return () => clearInterval(t);
+  }, [refresh]));
 
   const connect = (d: BondedDevice) =>
     connectReceiver(d.address).catch((e) => Alert.alert('Не подключился', e instanceof Error ? e.message : String(e)));
@@ -64,13 +70,15 @@ export default function ReceiverScreen() {
         )}
       </Card>
 
-      <Text style={styles.group}>Сопряжённые устройства Bluetooth</Text>
+      <Text style={styles.group}>{IOS ? 'Устройства Bluetooth LE рядом' : 'Сопряжённые устройства Bluetooth'}</Text>
       {!receiverAvailable && (
         <Text style={shared.muted}>Приёмник работает только в установленном приложении (не в Expo Go).</Text>
       )}
       {receiverAvailable && devices.length === 0 && (
         <Text style={shared.muted}>
-          Нет сопряжённых устройств. Включите приёмник и сопрягите его в настройках Bluetooth телефона, затем вернитесь сюда.
+          {IOS
+            ? 'Поиск… Приёмник должен быть включён. iPhone видит только Bluetooth LE: если приёмник отдаёт данные лишь по классическому Bluetooth, его здесь не будет — тогда работает GPS телефона.'
+            : 'Нет сопряжённых устройств. Включите приёмник и сопрягите его в настройках Bluetooth телефона, затем вернитесь сюда.'}
         </Text>
       )}
       {devices.map((d) => (
@@ -121,6 +129,8 @@ export default function ReceiverScreen() {
     </ScrollView>
   );
 }
+
+const IOS = Platform.OS === 'ios';
 
 function Cell({ label, value }: { label: string; value: string }) {
   return (
