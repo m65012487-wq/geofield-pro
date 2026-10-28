@@ -40,9 +40,12 @@ export default function SurveyScreen() {
   const [nextNames, setNextNames] = useState<Record<string, string>>({});
   const [canvasW, setCanvasW] = useState(0);
   const [basemap, setBasemap] = useState<Basemap | null>(null);
-  const [avgEpochs, setAvgEpochs] = useState(5);
+  const [avgEpochs, setAvgEpochs] = useState(2);
   const [accLimit, setAccLimit] = useState(0.05);
   const [antH, setAntH] = useState(2.0);
+  // приёмник с компенсацией наклона уже даёт остриё вехи — тогда веху не вычитаем
+  const [tiltByReceiver, setTiltByReceiver] = useState(false);
+  const pole = tiltByReceiver ? 0 : antH;
 
   // Усреднение: копим эпохи из живого потока (каждая новая позиция — эпоха)
   const [sampling, setSampling] = useState<{ code: string | null; anyQuality: boolean } | null>(null);
@@ -68,7 +71,8 @@ export default function SurveyScreen() {
       setCodes(cs);
       nextNamesForCodes(project.id, cs.map((c) => c.code)).then(setNextNames);
     });
-    kvGet('avgEpochs').then((v) => v && setAvgEpochs(parseInt(v, 10) || 5));
+    kvGet('avgEpochs').then((v) => v && setAvgEpochs(parseInt(v, 10) || 2));
+    kvGet('tiltByReceiver').then((v) => setTiltByReceiver(v === '1'));
     kvGet('accLimit').then((v) => v && setAccLimit(parseFloat(v) || 0.05));
     kvGet('antennaHeight').then((v) => v && setAntH(parseFloat(v)));
     loadBasemap(project.id).then(setBasemap);
@@ -120,7 +124,7 @@ export default function SurveyScreen() {
     const result: LivePosition = {
       latitude: mean((p) => p.latitude),
       longitude: mean((p) => p.longitude),
-      elevation: mean((p) => p.elevation) - antH,
+      elevation: mean((p) => p.elevation) - pole,
       hAccuracy: Math.max(...samples.map((p) => p.hAccuracy)),
       vAccuracy: Math.max(...samples.map((p) => p.vAccuracy)),
       quality: worst,
@@ -157,7 +161,7 @@ export default function SurveyScreen() {
     } else {
       save();
     }
-  }, [samples, sampling, avgEpochs, accLimit, antH, project, nextNames, calib]);
+  }, [samples, sampling, avgEpochs, accLimit, pole, project, nextNames, calib]);
 
   const handleManualSave = async () => {
     if (!avg || !project) return;
@@ -203,7 +207,7 @@ export default function SurveyScreen() {
   }
 
   const q = position?.quality ?? 'none';
-  const live = position ? localOf(calib, position.latitude, position.longitude, position.elevation - antH) : null;
+  const live = position ? localOf(calib, position.latitude, position.longitude, position.elevation - pole) : null;
   return (
     <View style={shared.container}>
       {/* Строка состояния приёмника */}
@@ -223,7 +227,7 @@ export default function SurveyScreen() {
           </Text>
         </View>
         <Pressable onPress={() => setAntEdit(antH.toFixed(3))} hitSlop={10} style={styles.antBtn}>
-          <Text style={styles.antText}>⟂ {antH.toFixed(3)}</Text>
+          <Text style={styles.antText}>{tiltByReceiver ? '⟂ IMU' : `⟂ ${antH.toFixed(3)}`}</Text>
         </Pressable>
       </Pressable>
 

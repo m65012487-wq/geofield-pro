@@ -28,13 +28,15 @@ export default function CalibrationScreen() {
   const [known, setKnown] = useState<KnownPoint[]>([]);
   const [target, setTarget] = useState<KnownPoint | null>(null);
   const [antH, setAntH] = useState(2);
-  const [epochs, setEpochs] = useState(10);
+  const [tiltByReceiver, setTiltByReceiver] = useState(false);
+  const [epochs, setEpochs] = useState(3);
 
   useFocusEffect(useCallback(() => {
     if (!project) return;
     countKnown(project.id).then(setNKnown);
     kvGet('antennaHeight').then((v) => v && setAntH(parseFloat(v)));
-    kvGet('avgEpochs').then((v) => v && setEpochs(Math.max(10, parseInt(v, 10) || 10)));
+    kvGet('tiltByReceiver').then((v) => setTiltByReceiver(v === '1'));
+    kvGet('avgEpochs').then((v) => v && setEpochs(Math.max(3, parseInt(v, 10) || 3)));
   }, [project?.id]));
 
   const pairs = calib?.pairs ?? [];
@@ -44,7 +46,7 @@ export default function CalibrationScreen() {
     if (!project || !target) return;
     const pair: CalibPair = {
       name: target.name, north: target.north, east: target.east, height: target.height,
-      lat: m.latitude, lon: m.longitude, h: m.elevation - antH, useHz: true, useV: true,
+      lat: m.latitude, lon: m.longitude, h: m.elevation - (tiltByReceiver ? 0 : antH), useHz: true, useV: true,
     };
     const rest = pairs.filter((p) => p.name !== target.name);
     try {
