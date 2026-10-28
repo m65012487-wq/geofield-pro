@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, TextInput } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { colors, space, font, radius } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
@@ -7,6 +7,7 @@ import { Button, Card, QualityBadge } from '../src/components/ui';
 import { useGnss } from '../src/lib/useGnss';
 import {
   bondedDevices, connectReceiver, disconnectReceiver, ensureBtPermission, receiverAvailable, switchToPhone,
+  sendToReceiver, NMEA_ENABLE_PRESETS, epochSeconds,
 } from '../src/lib/gnss';
 import { fmtCoord } from '../src/lib/geo';
 import type { BondedDevice } from '../modules/gnss-bt';
@@ -16,6 +17,15 @@ export default function ReceiverScreen() {
   const g = useGnss();
   const [devices, setDevices] = useState<BondedDevice[]>([]);
   const [showRaw, setShowRaw] = useState(false);
+  const [cmd, setCmd] = useState('');
+
+  const send = async (lines: string[]) => {
+    try {
+      for (const l of lines) { await sendToReceiver(l); await new Promise((r) => setTimeout(r, 150)); }
+    } catch (e) {
+      Alert.alert('Не отправлено', e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const refresh = useCallback(async () => {
     if (!receiverAvailable) return;
@@ -46,6 +56,7 @@ export default function ReceiverScreen() {
             <Cell label={p.hasSigma ? 'σ высота (GST)' : 'σ высота (оценка)'} value={`${p.vAccuracy.toFixed(3)} м`} />
             <Cell label="HDOP" value={p.hdop != null ? p.hdop.toFixed(1) : '–'} />
             <Cell label="Возраст поправок" value={p.diffAge != null && p.diffAge >= 0 ? `${p.diffAge.toFixed(0)} с` : '–'} />
+            <Cell label="Эпоха раз в" value={`${epochSeconds()} с`} />
           </View>
         )}
         {g.source === 'receiver' && g.status !== 'idle' && (
@@ -75,6 +86,31 @@ export default function ReceiverScreen() {
         <Button label="Обновить список" variant="secondary" onPress={refresh} style={{ flex: 1 }} />
         <Button label="GPS телефона" variant="secondary" onPress={() => switchToPhone()} style={{ flex: 1 }} />
       </View>
+
+      {g.source === 'receiver' && g.status === 'active' && (
+        <View style={{ marginTop: space.xl }}>
+          <Text style={styles.group}>Диагностика</Text>
+          <Text style={styles.msg}>
+            Получено байт: {g.bytes}{g.bytes > 0 && !p && !g.rawTail.some((l) => l.includes('GGA')) ? ' — данные идут, но строк GGA нет' : ''}
+          </Text>
+          {!!g.hexTail && <Text style={styles.raw} selectable>{g.hexTail}</Text>}
+          <Text style={[styles.msg, { marginTop: space.md }]}>
+            Если координат нет — включить вывод NMEA (GGA, GST раз в секунду). Неподходящие команды приёмник пропустит.
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm }}>
+            {NMEA_ENABLE_PRESETS.map((pr) => (
+              <Pressable key={pr.title} style={styles.chip} onPress={() => send(pr.commands)}>
+                <Text style={styles.chipT}>{pr.title}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={{ flexDirection: 'row', gap: space.sm, marginTop: space.sm }}>
+            <TextInput style={[shared.input, { flex: 1 }]} value={cmd} onChangeText={setCmd} autoCapitalize="characters"
+              placeholder="своя команда" placeholderTextColor={colors.textMuted} />
+            <Button label="→" onPress={() => cmd.trim() && send([cmd.trim()])} style={{ width: 64 }} />
+          </View>
+        </View>
+      )}
 
       <Pressable onPress={() => setShowRaw((v) => !v)} style={{ marginTop: space.xl }}>
         <Text style={styles.group}>{showRaw ? '▾' : '▸'} Поток NMEA</Text>
@@ -115,4 +151,6 @@ const styles = StyleSheet.create({
   devAddr: { color: colors.textMuted, fontSize: font.caption },
   devAct: { color: colors.accent, fontSize: font.small, fontWeight: '800' },
   raw: { color: colors.textSecondary, fontSize: 11, fontFamily: 'monospace' },
+  chip: { paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.accentDim },
+  chipT: { color: colors.accent, fontSize: font.small, fontWeight: '800' },
 });

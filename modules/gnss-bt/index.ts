@@ -14,6 +14,7 @@ interface GnssBtNative {
   write(text: string): Promise<void>;
   addListener(event: 'onLine', cb: (e: { line: string }) => void): EventSubscription;
   addListener(event: 'onState', cb: (e: { state: BtState; message: string }) => void): EventSubscription;
+  addListener(event: 'onStats', cb: (e: { bytes: number; hex: string }) => void): EventSubscription;
 }
 
 /** null в Expo Go и в вебе — там приёмника нет, работает только GPS телефона. */

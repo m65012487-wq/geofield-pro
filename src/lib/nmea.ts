@@ -76,8 +76,12 @@ export class NmeaParser {
     const lat = nmeaDeg(f[2], f[3]);
     const lon = nmeaDeg(f[4], f[5]);
     const q = num(f[6], 0);
+    // GGA без решения (качество 0, пустые координаты) тоже отдаём — по ней видно число спутников
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      return null;
+      return {
+        latitude: NaN, longitude: NaN, altitude: NaN, geoidSep: 0, ggaQuality: 0, quality: 'none',
+        satellites: num(f[7], 0), hdop: num(f[8], 0), diffAge: -1, sigmaN: null, sigmaE: null, sigmaH: null, utc: f[1],
+      };
     }
     return {
       latitude: lat,
