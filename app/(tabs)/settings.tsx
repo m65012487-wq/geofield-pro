@@ -6,6 +6,8 @@ import { shared } from '../../src/theme/shared';
 import { Card, Button } from '../../src/components/ui';
 import { kvGet, kvSet } from '../../src/db/database';
 import { DEFAULT_SEQ } from '../../src/lib/useShot';
+import { ScreenHelp } from '../../src/components/Help';
+import { HELP } from '../../src/lib/helpTexts';
 
 /** Настройки съёмки: число эпох усреднения и порог точности. */
 export default function SettingsScreen() {
@@ -74,6 +76,7 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={shared.container} contentContainerStyle={shared.pad}>
+      <ScreenHelp title="Настройки" text={HELP.settings} />
       <Card>
         <Text style={styles.cardTitle}>Съёмка</Text>
         <Text style={shared.label}>Эпох на точку (1–60)</Text>

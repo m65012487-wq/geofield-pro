@@ -53,10 +53,18 @@
       "./plugins/withMavenMirror",
       "./plugins/withVolumeKey",
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "GeoField Pro снимает фото к точкам съёмки.",
+          "photosPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-audio",
         {
-          "microphonePermission": false,
-          "recordAudioAndroid": false
+          "microphonePermission": "GeoField Pro записывает голосовые заметки к точкам.",
+          "recordAudioAndroid": true
         }
       ],
       [

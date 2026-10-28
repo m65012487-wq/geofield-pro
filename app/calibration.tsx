@@ -12,6 +12,8 @@ import { useCalibration, saveCalib } from '../src/lib/calibStore';
 import { listKnown, countKnown, kvGet } from '../src/db/database';
 import type { KnownPoint } from '../src/db/types';
 import type { CalibPair } from '../src/lib/calib';
+import { ScreenHelp } from '../src/components/Help';
+import { HELP } from '../src/lib/helpTexts';
 
 /**
  * Калибровка (как в LandStar): встать вехой на репер с известными местными координатами,
@@ -98,6 +100,7 @@ export default function CalibrationScreen() {
   const res = new Map((cal?.residuals ?? []).map((r) => [r.name, r]));
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Калибровка" text={HELP.calibration} />
       <ScrollView contentContainerStyle={[shared.pad, { paddingBottom: 120 }]}>
         <Card style={{ marginBottom: space.lg }}>
           <View style={styles.head}>

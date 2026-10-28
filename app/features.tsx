@@ -9,6 +9,8 @@ import { useActiveProject } from '../src/lib/useActiveProject';
 import { listFeatures, deleteFeature } from '../src/db/database';
 import { geoLength, geoArea, geoPerimeter } from '../src/lib/geo';
 import type { Feature } from '../src/db/types';
+import { ScreenHelp } from '../src/components/Help';
+import { HELP } from '../src/lib/helpTexts';
 
 /** Список линий и полигонов с геометрией: длина / площадь / периметр. */
 export default function FeaturesScreen() {
@@ -39,6 +41,7 @@ export default function FeaturesScreen() {
 
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Линии и полигоны" text={HELP.features} />
       <FlatList
         data={features}
         keyExtractor={(f) => f.id}

@@ -23,6 +23,8 @@ interface Props {
   onTapPoint?: (p: MapPoint | MapKnown, kind: 'point' | 'known') => void;
   /** Мельче кнопки — для карты, встроенной в экран съёмки. */
   compact?: boolean;
+  /** Линии по коду: pts — E0,N0,E1,N1,… в местных координатах. */
+  lines?: Array<{ color: string; pts: number[] }>;
 }
 
 const MIN_MPP = 0.01;
@@ -34,7 +36,7 @@ const clampMpp = (v: number) => Math.min(MAX_MPP, Math.max(MIN_MPP, v));
  * реперы, позиция. Один палец — сдвиг, два — масштаб, касание точки — сведения о ней.
  */
 export function MapCanvas({
-  width, height, here, points, basemap, known = [], showLabels = true, showKnown = true, target, onTapPoint, compact,
+  width, height, here, points, basemap, known = [], showLabels = true, showKnown = true, target, onTapPoint, compact, lines,
 }: Props) {
   const fitAll = () => {
     const xs: number[] = [], ys: number[] = [];
@@ -169,6 +171,14 @@ export function MapCanvas({
         {visible.map((v) => (
           <Polyline key={v.key} points={v.d} fill="none" stroke={v.color} strokeWidth={1.3} opacity={0.9} />
         ))}
+        {lines?.map((l, i) => {
+          const d: string[] = [];
+          for (let k = 0; k + 1 < l.pts.length; k += 2) {
+            const [x, y] = toPx(l.pts[k], l.pts[k + 1]);
+            d.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+          }
+          return <Polyline key={i} points={d.join(' ')} fill="none" stroke={l.color} strokeWidth={2} />;
+        })}
         {here && target && (() => {
           const [x1, y1] = toPx(here.east, here.north); const [x2, y2] = toPx(target.east, target.north);
           return <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colors.accent} strokeWidth={2} strokeDasharray="6,4" />;

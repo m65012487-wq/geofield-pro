@@ -6,7 +6,10 @@ import { shared } from '../src/theme/shared';
 import { Button, Card } from '../src/components/ui';
 import { useActiveProject } from '../src/lib/useActiveProject';
 import { listPoints, listFeatures, kvGet, listCodes } from '../src/db/database';
-import { exportPointsCsv, exportGeoJson, exportLocalTxt } from '../src/lib/exporter';
+import { exportPointsCsv, exportGeoJson, exportLocalTxt, writeCacheFile, shareFile, sanitizeName } from '../src/lib/exporter';
+import { ScreenHelp } from '../src/components/Help';
+import { surveyDxf } from '../src/lib/surveyDxf';
+import { parseLineCodes, DEFAULT_LINE_GAP } from '../src/lib/codeLines';
 import { sendDay } from '../src/lib/roadExport';
 import { loadRoad } from '../src/lib/road';
 import { loadRoadSettings } from '../src/lib/roadCheck';
@@ -18,7 +21,7 @@ export default function ExportScreen() {
   const { project } = useActiveProject();
   const [points, setPoints] = useState<SurveyPoint[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
-  const [busy, setBusy] = useState<'csv' | 'geojson' | 'txt' | 'day' | null>(null);
+  const [busy, setBusy] = useState<'csv' | 'geojson' | 'txt' | 'day' | 'dxf' | null>(null);
 
   const day = async () => {
     if (!project) return;
@@ -30,6 +33,23 @@ export default function ExportScreen() {
       Alert.alert('Отправлено', msg);
     } catch (e) {
       Alert.alert('Не получилось', e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const dxf = async () => {
+    if (!project) return;
+    setBusy('dxf');
+    try {
+      const [codes, lc, lg] = await Promise.all([listCodes(), kvGet('lineCodes'), kvGet('lineGap')]);
+      const gap = parseFloat(lg ?? '');
+      const { text, count } = surveyDxf(points, codes, parseLineCodes(lc), gap > 0 ? gap : DEFAULT_LINE_GAP);
+      if (!count) throw new Error('Нет точек с местными координатами — сначала калибровка');
+      const name = `${sanitizeName(project.name)}_съёмка.dxf`;
+      await shareFile(writeCacheFile(name, text), 'application/dxf', name);
+    } catch (e) {
+      Alert.alert('Ошибка экспорта', e instanceof Error ? e.message : 'Неизвестная ошибка');
     } finally {
       setBusy(null);
     }
@@ -73,6 +93,7 @@ export default function ExportScreen() {
 
   return (
     <ScrollView style={shared.container} contentContainerStyle={shared.pad}>
+      <ScreenHelp title="Экспорт" text={EXPORT_HELP} />
       <Card>
         <Text style={styles.title}>{project.name}</Text>
         <Text style={styles.stats}>
@@ -99,6 +120,15 @@ export default function ExportScreen() {
       </Card>
 
       <Card style={{ marginTop: space.lg }}>
+        <Text style={styles.fmtTitle}>DXF — съёмка с линиями</Text>
+        <Text style={styles.fmtDesc}>
+          Вся съёмка для AutoCAD: точки с подписью имени и высоты по слоям кодов и линии по коду (кромки, бровки —
+          включаются в «Кодах»). Координаты местные, по калибровке.
+        </Text>
+        <Button label="Экспорт DXF" onPress={dxf} loading={busy === 'dxf'} style={{ marginTop: space.md }} />
+      </Card>
+
+      <Card style={{ marginTop: space.lg }}>
         <Text style={styles.fmtTitle}>CSV — точки</Text>
         <Text style={styles.fmtDesc}>
           Таблица: имя, код, N/E/H местные, широта, долгота, высота, точность, качество. Открывается в Excel, AutoCAD, Credo.
@@ -122,6 +152,16 @@ export default function ExportScreen() {
     </ScrollView>
   );
 }
+
+const EXPORT_HELP = [
+  'Выберите формат и нажмите кнопку — откроется меню «Поделиться»: сохраните файл, отправьте в Telegram, на почту или в облако.',
+  'За сегодня — одной кнопкой: точки дня (каталог NEH), ведомость по пикетам и схема DXF по трассе. С ботом из настроек уходит прямо в Telegram.',
+  'TXT (имя,N,E,H,код) — каталог для AutoCAD и скриптов.',
+  'DXF — съёмка с линиями: чертёж для AutoCAD с точками по слоям кодов и линиями кромок/бровок.',
+  'CSV — таблица для Excel, AutoCAD, Credo.',
+  'GeoJSON — точки, линии и полигоны для QGIS, ArcGIS и карт.',
+  'TXT, DXF и местные координаты в CSV требуют калибровки проекта.',
+].join('\n\n');
 
 const styles = StyleSheet.create({
   title: { color: colors.textPrimary, fontSize: font.title, fontWeight: '800' },

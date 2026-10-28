@@ -61,6 +61,14 @@ export default function RootLayout() {
           <Stack.Screen name="export" options={{ title: 'Экспорт' }} />
           <Stack.Screen name="road" options={{ title: 'Трасса и допуски' }} />
           <Stack.Screen name="vedomost" options={{ title: 'Ведомость по пикетам' }} />
+          <Stack.Screen name="road-stake" options={{ title: 'Разбивка по оси' }} />
+          <Stack.Screen name="ntrip" options={{ title: 'Поправки NTRIP' }} />
+          <Stack.Screen name="basecheck" options={{ title: 'Контроль на репере' }} />
+          <Stack.Screen name="journal" options={{ title: 'Журнал дня' }} />
+          <Stack.Screen name="pipe" options={{ title: 'Труба' }} />
+          <Stack.Screen name="area" options={{ title: 'Площадь и материалы' }} />
+          <Stack.Screen name="tin" options={{ title: 'Объём по поверхности' }} />
+          <Stack.Screen name="backup" options={{ title: 'Копия и обмен' }} />
           <Stack.Screen name="cogo/pgz" options={{ title: 'ПГЗ — прямая задача' }} />
           <Stack.Screen name="cogo/ogz" options={{ title: 'ОГЗ — обратная задача' }} />
           <Stack.Screen name="cogo/area" options={{ title: 'Площадь' }} />

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, Text, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { HelpModal } from './Help';
 import { colors, space, radius, font } from '../theme/theme';
 
 interface TileProps {
@@ -10,12 +11,16 @@ interface TileProps {
   onPress: () => void;
   disabled?: boolean;
   badge?: string;
+  /** Подсказка по долгому нажатию. */
+  help?: string;
 }
 
 /** Крупная плитка меню в стиле LandStar — 3 в ряд, под перчатки. */
-export function Tile({ label, icon, onPress, disabled, badge }: TileProps) {
+export function Tile({ label, icon, onPress, disabled, badge, help }: TileProps) {
+  const [open, setOpen] = React.useState(false);
   return (
     <Pressable
+      onLongPress={help ? () => setOpen(true) : undefined}
       onPress={() => {
         if (disabled) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -30,6 +35,7 @@ export function Tile({ label, icon, onPress, disabled, badge }: TileProps) {
         )}
       </View>
       <Text style={styles.label} numberOfLines={2}>{label}</Text>
+      {help && <HelpModal visible={open} title={label} text={help} onClose={() => setOpen(false)} />}
     </Pressable>
   );
 }

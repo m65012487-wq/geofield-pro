@@ -15,6 +15,8 @@ import {
 import { loadShotSettings } from '../src/lib/useShot';
 import { schemeDxf, sendDay, vedomostCsv } from '../src/lib/roadExport';
 import { sanitizeName, shareFile, writeCacheFile } from '../src/lib/exporter';
+import { ScreenHelp } from '../src/components/Help';
+import { HELP } from '../src/lib/helpTexts';
 
 type Tab = 'pts' | 'slope' | 'cover' | 'vol';
 const TABS: Array<[Tab, string]> = [['pts', 'Точки'], ['slope', 'Уклоны'], ['cover', 'Полнота'], ['vol', 'Объёмы']];
@@ -100,6 +102,7 @@ export default function VedomostScreen() {
 
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Ведомость по пикетам" text={HELP.vedomost} />
       <View style={styles.summary}>
         <Text style={styles.sumT}>
           {placed.length} точек на трассе · с проектом {withDesign.length} · вне допуска{' '}

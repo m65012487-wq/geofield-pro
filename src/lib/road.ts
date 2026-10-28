@@ -172,34 +172,75 @@ export function withLine(r: Road, key: SideLine, txt: string): Road {
   return { ...r, lines: { ...r.lines, [key]: l } };
 }
 
-// ---------- хранение: файл на проект, как подложка ----------
+// ---------- хранение: файл на проект, как подложка; осей может быть несколько ----------
 
-const cache = new Map<string, Road | null>();
+/** Оси проекта: основная дорога, съезды, кюветы, стенки — у каждой свой пикетаж. Расчёты идут по активной. */
+export interface RoadSet { active: number; list: Road[] }
+
+const cache = new Map<string, RoadSet>();
 const listeners = new Set<(pid: string) => void>();
 const file = (pid: string) => new File(Paths.document, `road_${pid}.json`);
+const EMPTY: RoadSet = { active: 0, list: [] };
 
-export async function loadRoad(pid: string): Promise<Road | null> {
-  if (cache.has(pid)) return cache.get(pid)!;
+export async function loadRoads(pid: string): Promise<RoadSet> {
+  const hit = cache.get(pid);
+  if (hit) return hit;
   const f = file(pid);
-  let r: Road | null = null;
+  let v: RoadSet = EMPTY;
   if (f.exists) {
-    try { r = JSON.parse(await f.text(), (_k, v) => (v === null ? NaN : v)) as Road; } catch { r = null; }
+    try {
+      const raw = JSON.parse(await f.text(), (_k, x) => (x === null ? NaN : x));
+      // раньше в файле лежала одна ось
+      v = Array.isArray(raw?.list) ? raw as RoadSet : raw?.pk ? { active: 0, list: [raw as Road] } : EMPTY;
+    } catch { v = EMPTY; }
   }
-  cache.set(pid, r);
-  return r;
+  cache.set(pid, v);
+  return v;
+}
+
+function store(pid: string, v: RoadSet) {
+  const f = file(pid);
+  if (f.exists) f.delete();
+  if (v.list.length) { f.create(); f.write(JSON.stringify(v)); } // NaN пишется как null и читается обратно
+  cache.set(pid, v);
+  listeners.forEach((l) => l(pid));
+}
+
+/** Активная ось. */
+export async function loadRoad(pid: string): Promise<Road | null> {
+  const v = await loadRoads(pid);
+  return v.list[v.active] ?? null;
 }
 
 /** Без чтения файла — для обработчиков, где ждать нельзя (голос после замера). */
 export function roadCached(pid: string | undefined): Road | null {
-  return pid ? cache.get(pid) ?? null : null;
+  const v = pid ? cache.get(pid) : null;
+  return v?.list[v.active] ?? null;
 }
 
+/** Заменить активную ось (null — убрать её). Осей нет — r становится первой. */
 export function saveRoad(pid: string, r: Road | null) {
-  const f = file(pid);
-  if (f.exists) f.delete();
-  if (r) { f.create(); f.write(JSON.stringify(r)); } // NaN пишется как null и читается обратно
-  cache.set(pid, r);
-  listeners.forEach((l) => l(pid));
+  const v = cache.get(pid) ?? EMPTY;
+  const list = [...v.list];
+  if (r) { if (list.length) list[v.active] = r; else list.push(r); } else list.splice(v.active, 1);
+  store(pid, { active: Math.min(v.active, Math.max(0, list.length - 1)), list });
+}
+
+/** Добавить ось и сделать её активной. */
+export function addRoad(pid: string, r: Road) {
+  const v = cache.get(pid) ?? EMPTY;
+  store(pid, { active: v.list.length, list: [...v.list, r] });
+}
+
+export function setActiveRoad(pid: string, i: number) {
+  const v = cache.get(pid) ?? EMPTY;
+  if (i >= 0 && i < v.list.length) store(pid, { ...v, active: i });
+}
+
+export function renameRoad(pid: string, i: number, name: string) {
+  const v = cache.get(pid) ?? EMPTY;
+  if (!v.list[i]) return;
+  store(pid, { ...v, list: v.list.map((r, k) => (k === i ? { ...r, name } : r)) });
 }
 
 export function onRoadChange(l: (pid: string) => void) {

@@ -11,6 +11,8 @@ import {
 } from '../src/lib/gnss';
 import { fmtCoord } from '../src/lib/geo';
 import type { BondedDevice } from '../modules/gnss-bt';
+import { ScreenHelp } from '../src/components/Help';
+import { HELP } from '../src/lib/helpTexts';
 
 /** Подключение приёмника (как «Подключить к устр.» в LandStar) и диагностика потока NMEA. */
 export default function ReceiverScreen() {
@@ -46,6 +48,7 @@ export default function ReceiverScreen() {
   const p = g.position;
   return (
     <ScrollView style={shared.container} contentContainerStyle={shared.pad}>
+      <ScreenHelp title="Приёмник" text={HELP.receiver} />
       <Card style={{ marginBottom: space.lg }}>
         <View style={styles.head}>
           <Text style={styles.title}>{g.source === 'phone' ? 'GPS телефона' : g.deviceName ?? 'Приёмник не подключён'}</Text>

@@ -14,6 +14,8 @@ import { ShotModes } from '../src/components/ShotModes';
 import { useCalibration, localOf } from '../src/lib/calibStore';
 import { useRoad } from '../src/lib/roadCheck';
 import { liveRoadText } from '../src/lib/road';
+import { ScreenHelp } from '../src/components/Help';
+import { buildCodeLines, parseLineCodes, DEFAULT_LINE_GAP } from '../src/lib/codeLines';
 import { loadBasemap, saveBasemap, type Basemap } from '../src/lib/basemap';
 import {
   listPoints, listCodes, listKnown, kvGet, kvSet, nextNamesForCodes,
@@ -40,7 +42,9 @@ export default function MapScreen() {
   const [nextNames, setNextNames] = useState<Record<string, string>>({});
   const [antH, setAntH] = useState(2);
   const [tiltByReceiver, setTiltByReceiver] = useState(false);
-  const [layers, setLayers] = useState({ labels: true, known: true, points: true });
+  const [layers, setLayers] = useState<{ labels: boolean; known: boolean; points: boolean; lines?: boolean }>({ labels: true, known: true, points: true, lines: true });
+  const [lineCodes, setLineCodes] = useState<string[]>([]);
+  const [lineGap, setLineGap] = useState(DEFAULT_LINE_GAP);
   const [layersOpen, setLayersOpen] = useState(false);
   const [info, setInfo] = useState<{ title: string; lines: string[] } | null>(null);
   const [floatOn, setFloatOn] = useState(true);
@@ -58,6 +62,8 @@ export default function MapScreen() {
     kvGet('antennaHeight').then((v) => v && setAntH(parseFloat(v)));
     kvGet('tiltByReceiver').then((v) => setTiltByReceiver(v === '1'));
     kvGet('floatShutter').then((v) => setFloatOn(v !== '0'));
+    kvGet('lineCodes').then((v) => setLineCodes(parseLineCodes(v)));
+    kvGet('lineGap').then((v) => { const g = parseFloat(v ?? ''); setLineGap(g > 0 ? g : DEFAULT_LINE_GAP); });
     kvGet('mapLayers').then((v) => { if (v) try { setLayers(JSON.parse(v)); } catch { /* по умолчанию */ } });
   }, [project?.id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -71,6 +77,18 @@ export default function MapScreen() {
     const color = codes.find((c) => c.code === p.code)?.color;
     return l ? [{ id: p.id, name: p.name, code: p.code, north: l.north, east: l.east, height: l.height, color }] : [];
   }), [points, calib, codes]);
+
+  const mapLines = useMemo(() => {
+    if (layers.lines === false || !lineCodes.length) return [];
+    const withLocal = points.flatMap((p) => {
+      const l = p.north != null && p.east != null ? { north: p.north, east: p.east, height: p.height } : localOf(calib, p.latitude, p.longitude, p.elevation);
+      return l ? [{ ...p, north: l.north, east: l.east, height: l.height ?? p.elevation }] : [];
+    });
+    return buildCodeLines(withLocal, lineCodes, lineGap).map((l) => ({
+      color: codes.find((c) => c.code === l.code)?.color ?? colors.accent,
+      pts: l.pts.flatMap((v) => [v.east, v.north]),
+    }));
+  }, [points, calib, codes, lineCodes, lineGap, layers.lines]);
 
   const last = mapPoints[0];
   const dLast = live && last ? Math.hypot(live.north - last.north, live.east - last.east) : null;
@@ -114,6 +132,7 @@ export default function MapScreen() {
   const noLocal = !calib?.cal;
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Карта" text={MAP_HELP} />
       {/* статус приёмника */}
       <Pressable style={styles.status} onPress={() => router.push('/receiver')}>
         <QualityBadge quality={position?.quality ?? 'none'} />
@@ -148,6 +167,7 @@ export default function MapScreen() {
           <MapCanvas width={size.w} height={size.h} basemap={basemap}
             here={live ? { north: live.north, east: live.east } : null}
             points={layers.points ? mapPoints : []}
+            lines={mapLines}
             known={known} showKnown={layers.known} showLabels={layers.labels}
             onTapPoint={showInfo} />
         )}
@@ -191,6 +211,7 @@ export default function MapScreen() {
             <ScrollView>
               <LayerRow label="Снятые точки" value={layers.points} onChange={(v) => setLayer('points', v)} />
               <LayerRow label={`Реперы (${known.length})`} value={layers.known} onChange={(v) => setLayer('known', v)} />
+              <LayerRow label="Линии по коду" value={layers.lines !== false} onChange={(v) => setLayer('lines', v)} />
               <LayerRow label="Подписи" value={layers.labels} onChange={(v) => setLayer('labels', v)} />
               {basemap && <Text style={[shared.label, { marginTop: space.md }]}>Подложка: {basemap.name}</Text>}
               {basemap?.layers.map((l, i) => (
@@ -214,6 +235,16 @@ export default function MapScreen() {
     </View>
   );
 }
+
+const MAP_HELP = [
+  'Карта показывает план: подложку, снятые точки, реперы и вас (зелёный прицел). Одним пальцем двигайте, двумя меняйте масштаб, касание точки покажет её данные. Кнопки справа: ＋ － масштаб, ◎ следить за мной, ⤢ показать всё.',
+  'Как снять точку:',
+  '1. Сверху выберите код объекта — в нём видно имя следующей точки.',
+  '2. Нажмите «Измерить» внизу, плавающую круглую кнопку или клавишу громкости. Приёмник усредняет эпохи и записывает точку.',
+  'Режимы под кодами: ⟳ поперечник — после точки сам предлагает следующую по поперечнику; «Авто N м» — снимает точку, когда вы прошли N метров; «По остановке» — когда веха остановилась; «Этап ДО/ПОСЛЕ» — помечает точки для подсчёта толщины и объёмов.',
+  'После точки в строке под координатами показывается пикет и отклонение от оси (если загружена трасса).',
+  'Кнопка «Слои» включает точки, реперы, подписи, подложку и «Линии по коду» (кромки, бровки — какие коды рисовать линией, задаётся в «Кодах»). Фото и голос к точке добавляются на экране «Съёмка», смотрятся в «БД точек».',
+].join('\n\n');
 
 function Cell({ l, v }: { l: string; v: string }) {
   return (

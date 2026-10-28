@@ -7,6 +7,8 @@ import { shared } from '../src/theme/shared';
 import { Button } from '../src/components/ui';
 import { useActiveProject } from '../src/lib/useActiveProject';
 import { fileTitle, loadBasemap, parseDxf, saveBasemap, type Basemap } from '../src/lib/basemap';
+import { ScreenHelp } from '../src/components/Help';
+import { HELP } from '../src/lib/helpTexts';
 
 /** Подложка проекта (как «Карты-подложки» в LandStar): DXF в местных координатах, слои вкл/выкл. */
 export default function BasemapScreen() {
@@ -47,6 +49,7 @@ export default function BasemapScreen() {
 
   return (
     <ScrollView style={shared.container} contentContainerStyle={shared.pad}>
+      <ScreenHelp title="Подложка" text={HELP.basemap} />
       <Button label={bm ? 'Заменить DXF' : 'Загрузить DXF'} onPress={pick} loading={busy} />
       <Text style={[shared.muted, { marginTop: space.md }]}>
         DXF в местной системе (как в AutoCAD). Берутся линии и полилинии; текст и точки не грузятся — подписи и

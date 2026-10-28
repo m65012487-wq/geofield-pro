@@ -10,6 +10,8 @@ import { listKnown, replaceKnown } from '../src/db/database';
 import { fileTitle } from '../src/lib/basemap';
 import { parseKnown } from '../src/lib/importKnown';
 import type { KnownPoint } from '../src/db/types';
+import { ScreenHelp } from '../src/components/Help';
+import { HELP } from '../src/lib/helpTexts';
 
 /** Реперы проекта: импорт каталога из файла (txt/csv «имя,N,E,H» или LandXML) и просмотр. */
 export default function KnownScreen() {
@@ -47,6 +49,7 @@ export default function KnownScreen() {
 
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Реперы" text={HELP.known} />
       <View style={{ padding: space.lg, gap: space.md }}>
         <Button label="Импорт из файла (txt, csv, LandXML)" onPress={importFile} loading={busy} />
         <TextInput style={shared.input} value={search} placeholder="Поиск" placeholderTextColor={colors.textMuted}

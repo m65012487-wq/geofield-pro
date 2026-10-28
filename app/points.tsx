@@ -1,12 +1,14 @@
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, TextInput, Alert, Modal,
+  View, Text, FlatList, Pressable, StyleSheet, TextInput, Alert, Modal, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, space, font } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button, Card, QualityBadge } from '../src/components/ui';
+import { ScreenHelp } from '../src/components/Help';
+import { removeMedia, deletePointFiles, playVoice, stopVoice } from '../src/lib/media';
 import { useActiveProject } from '../src/lib/useActiveProject';
 import { listPoints, deletePoint, updatePoint } from '../src/db/database';
 import type { SurveyPoint } from '../src/db/types';
@@ -24,6 +26,10 @@ export default function PointsScreen() {
   const [eName, setEName] = useState('');
   const [eCode, setECode] = useState('');
   const [eNote, setENote] = useState('');
+  // точка, у которой открыты фото/голос
+  const [mediaId, setMediaId] = useState<string | null>(null);
+  const mediaPt = points.find((p) => p.id === mediaId) ?? null;
+  const closeMedia = () => { stopVoice(); setMediaId(null); };
 
   const load = useCallback(() => {
     if (!project) return;
@@ -45,7 +51,7 @@ export default function PointsScreen() {
           Alert.alert('Удалить точку?', `«${p.name}» будет удалена.`, [
             { text: 'Отмена', style: 'cancel' },
             { text: 'Удалить', style: 'destructive',
-              onPress: async () => { await deletePoint(p.id, project!.id); load(); } },
+              onPress: async () => { deletePointFiles(p); await deletePoint(p.id, project!.id); load(); } },
           ]);
         } },
       { text: 'Отмена', style: 'cancel' },
@@ -70,6 +76,7 @@ export default function PointsScreen() {
   return (
     <View style={shared.container}>
       <Stack.Screen options={{ title: stakeoutMode ? 'Вынос: выбор точки' : 'БД точек' }} />
+      <ScreenHelp title="БД точек" text={POINTS_HELP} />
       <View style={styles.searchWrap}>
         <Ionicons name="search" size={18} color={colors.textMuted} />
         <TextInput
@@ -106,6 +113,8 @@ export default function PointsScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.sm }}>
                   <Text style={styles.name}>{item.name}</Text>
                   {!!item.code && <Text style={styles.code}>{item.code}</Text>}
+                  {!!item.photo && <Text onPress={() => setMediaId(item.id)} style={styles.icon}>📷</Text>}
+                  {!!item.voice && <Text onPress={() => setMediaId(item.id)} style={styles.icon}>🎙</Text>}
                 </View>
                 <Text style={styles.coord}>
                   {item.latitude.toFixed(6)}, {item.longitude.toFixed(6)}
@@ -119,6 +128,29 @@ export default function PointsScreen() {
           </Pressable>
         )}
       />
+
+      <Modal visible={mediaPt != null} transparent animationType="fade" onRequestClose={closeMedia}>
+        <View style={shared.modalOverlay}>
+          <View style={[shared.modalSheet, { maxHeight: '90%' }]}>
+            <Text style={shared.modalTitle}>{mediaPt?.name}</Text>
+            {!!mediaPt?.photo && (
+              <>
+                <Image source={{ uri: mediaPt.photo }} style={styles.photo} resizeMode="contain" />
+                <Button label="Удалить фото" variant="secondary" style={{ marginTop: space.sm }}
+                  onPress={() => removeMedia(mediaPt, 'photo').then(load)} />
+              </>
+            )}
+            {!!mediaPt?.voice && (
+              <View style={{ flexDirection: 'row', gap: space.md, marginTop: space.md }}>
+                <Button label="▶ Слушать" style={{ flex: 1 }} onPress={() => playVoice(mediaPt.voice!)} />
+                <Button label="Удалить голос" variant="secondary" style={{ flex: 1 }}
+                  onPress={() => { stopVoice(); removeMedia(mediaPt, 'voice').then(load); }} />
+              </View>
+            )}
+            <Button label="Закрыть" variant="secondary" style={{ marginTop: space.md }} onPress={closeMedia} />
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={!!editing} transparent animationType="slide" onRequestClose={() => setEditing(null)}>
         <View style={shared.modalOverlay}>
@@ -144,7 +176,16 @@ export default function PointsScreen() {
   );
 }
 
+const POINTS_HELP = [
+  'Здесь все точки проекта. Сверху поиск по имени или коду.',
+  'Нажмите на точку — меню: «Вынос» (навигация к точке), «Редактировать» (имя, код, примечание) или «Удалить».',
+  'Значок 📷 у точки — к ней есть фото, 🎙 — голосовая заметка. Нажмите на значок: откроется фото на весь экран, кнопка «Слушать» проиграет голос, там же их можно удалить. Фото и голос добавляются на экране «Съёмка» у последней точки.',
+  'При удалении точки её фото и голос тоже удаляются.',
+].join('\n\n');
+
 const styles = StyleSheet.create({
+  icon: { fontSize: font.bodyLg, paddingHorizontal: 4 },
+  photo: { width: '100%', height: 340, backgroundColor: '#000' },
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: space.sm,
     marginHorizontal: space.lg, marginTop: space.md,

@@ -1,9 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet, Modal, TextInput, Alert, Switch } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { colors, space, font } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button, Card } from '../src/components/ui';
+import { ScreenHelp, HelpButton } from '../src/components/Help';
+import { parseLineCodes, DEFAULT_LINE_GAP } from '../src/lib/codeLines';
 import { listCodes, addCode, deleteCode, kvGet, kvSet } from '../src/db/database';
 import { DEFAULT_CODE_EPOCHS } from '../src/lib/useShot';
 import type { FeatureCode } from '../src/db/types';
@@ -19,11 +21,15 @@ export default function CodesScreen() {
   const [color, setColor] = useState(PALETTE[0]);
   const [epochs, setEpochs] = useState<Record<string, number>>(DEFAULT_CODE_EPOCHS);
   const [defEpochs, setDefEpochs] = useState(2);
+  const [lineCodes, setLineCodes] = useState<string[]>([]);
+  const [gap, setGap] = useState(String(DEFAULT_LINE_GAP));
   const [epEdit, setEpEdit] = useState<{ code: string; value: string } | null>(null);
 
   const load = useCallback(() => {
     listCodes().then(setCodes);
     kvGet('codeEpochs').then((v) => { if (v) try { setEpochs(JSON.parse(v)); } catch { /* по умолчанию */ } });
+    kvGet('lineCodes').then((v) => setLineCodes(parseLineCodes(v)));
+    kvGet('lineGap').then((v) => setGap(v || String(DEFAULT_LINE_GAP)));
     kvGet('avgEpochs').then((v) => v && setDefEpochs(parseInt(v, 10) || 2));
   }, []);
 
@@ -37,6 +43,17 @@ export default function CodesScreen() {
     setEpEdit(null);
   };
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const toggleLine = async (c: string, on: boolean) => {
+    const next = on ? [...lineCodes.filter((x) => x !== c), c] : lineCodes.filter((x) => x !== c);
+    setLineCodes(next);
+    await kvSet('lineCodes', next.join(','));
+  };
+  const saveGap = async (t: string) => {
+    setGap(t);
+    const g = parseFloat(t.replace(',', '.'));
+    if (g > 0) await kvSet('lineGap', String(g));
+  };
 
   const handleAdd = async () => {
     if (!code.trim()) { Alert.alert('Введите код'); return; }
@@ -55,10 +72,20 @@ export default function CodesScreen() {
 
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Коды объектов" text={CODES_HELP} />
       <FlatList
         data={codes}
         keyExtractor={(c) => c.id}
         contentContainerStyle={{ padding: space.lg, paddingBottom: 110 }}
+        ListHeaderComponent={
+          <Card style={{ ...styles.row, marginBottom: space.lg }}>
+            <Text style={[styles.desc, { fontSize: font.small }]}>Разрыв линии, если между точками больше, м</Text>
+            <TextInput style={[shared.input, { width: 70, textAlign: 'center' }]} value={gap} onChangeText={saveGap}
+              keyboardType="decimal-pad" />
+            <HelpButton size={20} title="Разрыв линии"
+              text="Точки кода с переключателем «линия» соединяются по порядку съёмки. Если следующая точка дальше предыдущей больше, чем это число метров, линия рвётся — так кромка не тянется через весь объект к другому участку." />
+          </Card>
+        }
         renderItem={({ item }) => (
           <Pressable onLongPress={() => confirmDelete(item)}
             onPress={() => setEpEdit({ code: item.code, value: epochs[item.code] ? String(epochs[item.code]) : '' })}>
@@ -66,6 +93,10 @@ export default function CodesScreen() {
               <View style={[styles.dot, { backgroundColor: item.color }]} />
               <Text style={styles.code}>{item.code}</Text>
               <Text style={styles.desc} numberOfLines={1}>{item.description}</Text>
+              <View style={styles.lineSw}>
+                <Text style={styles.lineT}>линия</Text>
+                <Switch value={lineCodes.includes(item.code)} onValueChange={(v) => toggleLine(item.code, v)} />
+              </View>
               <Text style={[styles.ep, !epochs[item.code] && { color: colors.textMuted }]}>{epochs[item.code] ?? defEpochs} эп.</Text>
             </Card>
           </Pressable>
@@ -121,7 +152,16 @@ export default function CodesScreen() {
   );
 }
 
+const CODES_HELP = [
+  'Код — это вид объекта (дорога, кювет, опора). Из кодов на экране «Съёмка» строятся кнопки.',
+  'Эпохи по коду: нажмите на код и введите, сколько эпох усреднять для него. 1 — быстро, для массовых точек; 3 и больше — для съездов, реперов, контроля. Пусто — как в настройках.',
+  'Линия: включите переключатель «линия» у кода линейного объекта (кромка, бровка, кювет). Точки этого кода соединятся линией по порядку съёмки, цветом кода: на «Карте» (слой «Линии по коду») и в DXF при экспорте. Поле сверху — разрыв: если следующая точка дальше этого числа метров, линия рвётся.',
+  'Удаление: удержите палец на коде и подтвердите. Новый код добавляет кнопка внизу.',
+].join('\n\n');
+
 const styles = StyleSheet.create({
+  lineSw: { alignItems: 'center' },
+  lineT: { color: colors.textMuted, fontSize: font.caption },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
   dot: { width: 16, height: 16, borderRadius: 8 },
   code: { color: colors.textPrimary, fontSize: font.bodyLg, fontWeight: '800', minWidth: 70 },

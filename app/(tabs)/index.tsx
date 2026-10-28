@@ -8,6 +8,8 @@ import { Button, Card } from '../../src/components/ui';
 import { listProjects, createProject, deleteProject, kvGet } from '../../src/db/database';
 import { setActiveProject } from '../../src/lib/useActiveProject';
 import type { Project } from '../../src/db/types';
+import { ScreenHelp } from '../../src/components/Help';
+import { HELP } from '../../src/lib/helpTexts';
 
 export default function ProjectsScreen() {
   const router = useRouter();
@@ -46,6 +48,7 @@ export default function ProjectsScreen() {
 
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Проекты" text={HELP.projects} />
       <FlatList
         data={projects}
         keyExtractor={(p) => p.id}

@@ -11,6 +11,8 @@ import { useGnss } from '../src/lib/useGnss';
 import { haversine, bearing, toLocalMeters } from '../src/lib/geo';
 import { getPoint } from '../src/db/database';
 import type { SurveyPoint } from '../src/db/types';
+import { ScreenHelp } from '../src/components/Help';
+import { HELP } from '../src/lib/helpTexts';
 
 const ARROW_SIZE = 220;
 /** Дистанция «в допуске» — сигнал попадания, м. */
@@ -62,6 +64,7 @@ export default function StakeoutScreen() {
 
   return (
     <ScrollView style={shared.container} contentContainerStyle={{ padding: space.lg, paddingBottom: 40 }}>
+      <ScreenHelp title="Вынос точки" text={HELP.stakeout} />
       <Stack.Screen options={{ title: target ? `Вынос: ${target.name}` : 'Вынос точки' }} />
 
       <Card style={styles.headerCard}>

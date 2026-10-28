@@ -28,6 +28,16 @@ class GnssBtModule : Module() {
   @Volatile private var socket: BluetoothSocket? = null
   @Volatile private var reader: Thread? = null
   @Volatile private var generation = 0
+  /** Последняя GGA от приёмника — NTRIP шлёт её на caster (VRS). */
+  @Volatile private var lastGga: String? = null
+  @Volatile private var lastGgaAt = 0L
+  private val writeLock = Any()
+  private val ntrip = NtripClient(
+    sink = { b, n -> writeBytes(b, n) },
+    // для VRS — только свежая позиция: приёмник отвалился, старую GGA не шлём
+    gga = { if (System.currentTimeMillis() - lastGgaAt < 30_000) lastGga else null },
+    emit = { sendEvent("onNtrip", it) },
+  )
 
   private val context: Context
     get() = appContext.reactContext ?: throw IllegalStateException("нет контекста")
@@ -41,7 +51,7 @@ class GnssBtModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("GnssBt")
-    Events("onLine", "onState", "onStats")
+    Events("onLine", "onState", "onStats", "onNtrip")
 
     Function("isEnabled") { adapter()?.isEnabled == true }
 
@@ -91,12 +101,30 @@ class GnssBtModule : Module() {
     }
 
     AsyncFunction("write") { text: String ->
-      val s = socket ?: throw IllegalStateException("нет соединения")
-      s.outputStream.write(text.toByteArray(StandardCharsets.US_ASCII))
-      s.outputStream.flush()
+      val b = text.toByteArray(StandardCharsets.US_ASCII)
+      writeBytes(b, b.size)
+    }
+
+    Function("ntripStart") { host: String, port: Int, mount: String, user: String, pass: String ->
+      try { ntrip.start(host.trim(), port, mount.trim().trimStart('/'), user, pass) } catch (e: Throwable) {
+        sendEvent("onNtrip", mapOf("state" to "error", "message" to "Ошибка: ${e.message}", "bytes" to 0.0, "rate" to 0.0, "lastMs" to -1.0))
+      }
+    }
+
+    Function("ntripStop") {
+      try { ntrip.stop() } catch (_: Throwable) {}
+    }
+
+    AsyncFunction("ntripSourcetable") { host: String, port: Int, user: String, pass: String, promise: Promise ->
+      Thread({
+        try { promise.resolve(NtripClient.sourcetable(host.trim(), port, user, pass)) } catch (e: Throwable) {
+          try { promise.reject("NTRIP_TABLE", e.message ?: "ошибка", e) } catch (_: Throwable) {}
+        }
+      }, "ntrip-table").start()
     }
 
     OnDestroy {
+      try { ntrip.stop(silent = true) } catch (_: Throwable) {}
       generation++
       closeSocket()
     }
@@ -143,7 +171,12 @@ class GnssBtModule : Module() {
         for (i in 0 until n) {
           val c = (buf[i].toInt() and 0xFF)
           if (c == '\n'.code || c == '\r'.code) {
-            if (line.isNotBlank()) sendEvent("onLine", mapOf("line" to line.toString()))
+            if (line.isNotBlank()) {
+              val l = line.toString()
+              // запоминаем GGA с координатами (пустая, без фиксации, на caster не нужна)
+              if (l.length > 20 && l[0] == '$' && l.startsWith("GGA", 3) && l.split(',').getOrNull(2)?.isNotEmpty() == true) { lastGga = l; lastGgaAt = System.currentTimeMillis() }
+              sendEvent("onLine", mapOf("line" to l))
+            }
             line.setLength(0)
           } else if (c in 32..126) {
             if (line.length < 512) line.append(c.toChar())
@@ -165,9 +198,19 @@ class GnssBtModule : Module() {
     }
   }
 
+  /** Запись байт в приёмник (RTCM из NTRIP и текстовые команды) под одним замком. */
+  private fun writeBytes(b: ByteArray, n: Int) {
+    val s = socket ?: throw IllegalStateException("нет соединения")
+    synchronized(writeLock) {
+      s.outputStream.write(b, 0, n)
+      s.outputStream.flush()
+    }
+  }
+
   private fun closeSocket() {
     val s = socket
     socket = null
+    lastGga = null
     try { s?.close() } catch (_: Exception) {}
   }
 }

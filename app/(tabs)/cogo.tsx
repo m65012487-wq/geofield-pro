@@ -4,11 +4,14 @@ import { useRouter } from 'expo-router';
 import { colors, space, font } from '../../src/theme/theme';
 import { shared } from '../../src/theme/shared';
 import { Tile } from '../../src/components/Tile';
+import { ScreenHelp } from '../../src/components/Help';
+import { HELP } from '../../src/lib/helpTexts';
 
 export default function CogoScreen() {
   const router = useRouter();
   return (
     <ScrollView style={shared.container} contentContainerStyle={shared.pad}>
+      <ScreenHelp title="Задачи" text={HELP.cogo} />
       <Text style={styles.hint}>
         Геодезические калькуляторы. Работают с плоскими координатами N/E (метры).
       </Text>

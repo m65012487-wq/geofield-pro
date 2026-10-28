@@ -3,7 +3,7 @@ import type { Project, SurveyPoint, Feature, FeatureCode, Vertex, KnownPoint } f
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-function getDb(): Promise<SQLite.SQLiteDatabase> {
+export function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) dbPromise = SQLite.openDatabaseAsync('geofield.db');
   return dbPromise;
 }
@@ -86,7 +86,9 @@ export async function initDatabase(): Promise<void> {
   for (const c of ['north', 'east', 'height']) {
     if (!cols.some((x) => x.name === c)) await db.execAsync(`ALTER TABLE points ADD COLUMN ${c} REAL`);
   }
-  if (!cols.some((x) => x.name === 'stage')) await db.execAsync("ALTER TABLE points ADD COLUMN stage TEXT NOT NULL DEFAULT ''");
+  for (const c of ['stage', 'photo', 'voice']) {
+    if (!cols.some((x) => x.name === c)) await db.execAsync(`ALTER TABLE points ADD COLUMN ${c} TEXT NOT NULL DEFAULT ''`);
+  }
   // Заполняем библиотеку кодов при первом запуске
   const row = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) AS c FROM codes');
   if ((row?.c ?? 0) === 0) {
@@ -202,7 +204,7 @@ export async function addPoint(p: Omit<SurveyPoint, 'id' | 'createdAt'>): Promis
   return point;
 }
 
-export async function updatePoint(id: string, fields: Partial<Pick<SurveyPoint, 'name' | 'code' | 'note' | 'elevation' | 'north' | 'east' | 'height' | 'stage'>>): Promise<void> {
+export async function updatePoint(id: string, fields: Partial<Pick<SurveyPoint, 'name' | 'code' | 'note' | 'elevation' | 'north' | 'east' | 'height' | 'stage' | 'photo' | 'voice'>>): Promise<void> {
   const db = await getDb();
   const sets: string[] = [];
   const vals: (string | number)[] = [];

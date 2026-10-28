@@ -10,6 +10,8 @@ import { useGnss } from '../src/lib/useGnss';
 import { useActiveProject } from '../src/lib/useActiveProject';
 import { listPoints, listFeatures, addFeature, countFeatures } from '../src/db/database';
 import type { SurveyPoint, Feature, Vertex } from '../src/db/types';
+import { ScreenHelp } from '../src/components/Help';
+import { HELP } from '../src/lib/helpTexts';
 
 const CANVAS_H = 300;
 
@@ -84,6 +86,7 @@ export default function SurveyFeatureScreen() {
 
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Съёмка объекта" text={HELP.surveyFeature} />
       <Stack.Screen options={{ title: isPoly ? 'Съёмка полигона' : 'Съёмка линии' }} />
       <ScrollView contentContainerStyle={{ padding: space.lg, paddingBottom: 200 }}>
         <Card style={styles.statusCard}>

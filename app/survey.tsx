@@ -12,6 +12,8 @@ import { useShot } from '../src/lib/useShot';
 import { ShotModes } from '../src/components/ShotModes';
 import { SurveyCanvas } from '../src/components/SurveyCanvas';
 import { MapCanvas, type MapPoint } from '../src/components/MapCanvas';
+import { ScreenHelp } from '../src/components/Help';
+import { takePhoto, deletePointFiles, useVoiceRecorder } from '../src/lib/media';
 import { loadBasemap, type Basemap } from '../src/lib/basemap';
 import { useGnss } from '../src/lib/useGnss';
 import { useActiveProject } from '../src/lib/useActiveProject';
@@ -111,6 +113,10 @@ export default function SurveyScreen() {
   };
 
   const last = points[0];
+  const voice = useVoiceRecorder(load);
+  const errMsg = (e: unknown) => Alert.alert('Не получилось', e instanceof Error ? e.message : String(e));
+  const photoLast = () => { if (last) takePhoto(last.id).then(load).catch(errMsg); };
+  const voiceLast = () => { if (last) voice.toggle(last.id).catch(errMsg); };
 
   const editLast = () => {
     if (!last) return;
@@ -126,7 +132,7 @@ export default function SurveyScreen() {
     if (!last || !project) return;
     Alert.alert('Удалить точку', `Удалить ${last.name}?`, [
       { text: 'Нет', style: 'cancel' },
-      { text: 'Удалить', style: 'destructive', onPress: () => deletePoint(last.id, project.id).then(load) },
+      { text: 'Удалить', style: 'destructive', onPress: () => { deletePointFiles(last); deletePoint(last.id, project.id).then(load); } },
     ]);
   };
 
@@ -146,6 +152,7 @@ export default function SurveyScreen() {
   const live = position ? localOf(calib, position.latitude, position.longitude, position.elevation - pole) : null;
   return (
     <View style={shared.container}>
+      <ScreenHelp title="Съёмка" text={SURVEY_HELP} />
       {/* Строка состояния приёмника */}
       <Pressable style={styles.statusBar} onPress={() => router.push('/receiver')}>
         <QualityBadge quality={q} />
@@ -209,11 +216,15 @@ export default function SurveyScreen() {
         {last && (
           <View style={styles.lastRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.lastName}>{last.name}  <Text style={styles.lastMeta}>{last.code}</Text></Text>
+              <Text style={styles.lastName}>{last.name}  <Text style={styles.lastMeta}>{last.code}</Text>{last.photo ? '  📷' : ''}{last.voice ? '  🎙' : ''}</Text>
               <Text style={styles.lastMeta}>
                 H {(last.height ?? last.elevation).toFixed(3)} · σ {fmt(last.hAccuracy)} · {last.quality.toUpperCase()} · всего {points.length}
               </Text>
             </View>
+            <Pressable onPress={photoLast} style={styles.smallBtn}><Text style={styles.smallBtnText}>📷</Text></Pressable>
+            <Pressable onPress={voiceLast} style={[styles.smallBtn, voice.recId === last.id && { backgroundColor: colors.dangerBg }]}>
+              <Text style={styles.smallBtnText}>{voice.recId === last.id ? '⏹' : '🎙'}</Text>
+            </Pressable>
             <Pressable onPress={editLast} style={styles.smallBtn}><Text style={styles.smallBtnText}>Правка</Text></Pressable>
             <Pressable onPress={removeLast} style={styles.smallBtn}><Text style={[styles.smallBtnText, { color: colors.danger }]}>Удалить</Text></Pressable>
           </View>
@@ -315,6 +326,17 @@ export default function SurveyScreen() {
     </View>
   );
 }
+
+const SURVEY_HELP = [
+  'Экран для съёмки точек. Вверху состояние приёмника (качество решения, спутники, точность), ниже режимы и мини-карта.',
+  'Как снять точку:',
+  '1. Нажмите кнопку объекта (дорога, кювет и т. д.). Приёмник дождётся FIX, усреднит нужное число эпох и запишет точку с именем «код + номер».',
+  '2. Удержите кнопку объекта, чтобы задать следующий номер.',
+  '3. Круглая плавающая кнопка и клавиша громкости делают то же самое для выбранного объекта, не глядя на экран. Нижняя кнопка «Снять точку» — точка со своим именем.',
+  'Режимы над мини-картой: ⟳ поперечник — после точки предлагает следующую по поперечнику; «Авто N м» — снимает точку каждые N метров пути; «По остановке» — снимает, когда веха остановилась; «Этап ДО/ПОСЛЕ» — помечает точки для толщины и объёмов.',
+  'Если загружена трасса, после точки в строке состояния виден пикет и отклонение от оси.',
+  'Последняя точка внизу: «Правка» и «Удалить» её. 📷 — сфотографировать точку. 🎙 — нажмите и говорите, ещё раз нажмите, чтобы остановить и сохранить. Значки 📷 🎙 рядом с именем значат, что фото или голос уже есть. Смотреть и слушать — в «БД точек».',
+].join('\n\n');
 
 function fmt(v: number | undefined | null) {
   if (v == null || !Number.isFinite(v)) return '–';

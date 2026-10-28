@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { colors, space, font } from '../theme/theme';
 import type { ShotEngine } from '../lib/useShot';
+import { HelpButton } from './Help';
+import { HELP } from '../lib/helpTexts';
 
 /**
  * Переключатели ускоренной съёмки над картой/плитками: поперечник, автосъёмка, замер по остановке,
@@ -17,6 +19,7 @@ export function ShotModes({ shot }: { shot: ShotEngine }) {
         <Chip on={shot.autoOn} onPress={shot.toggleAuto} label={`Авто ${s.autoStep} м`} />
         <Chip on={shot.stillOn} onPress={shot.toggleStill} label="По остановке" />
         <Chip on={shot.stage !== ''} onPress={shot.cycleStage} label={shot.stage ? `Съёмка ${shot.stage.toUpperCase()}` : 'Этап: —'} />
+        <HelpButton size={22} title="Режимы съёмки" text={HELP.shotModes} />
         {shot.waitingFix && <Text style={styles.wait}>жду FIX…</Text>}
       </ScrollView>
       {shot.lastInfo && (
