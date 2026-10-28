@@ -3,6 +3,8 @@ name: Unsigned IPA
 # Неподписанный .ipa для подписи на устройстве (eSign, Sideloadly и т.п.),
 # как в Noor. Нативного проекта в репозитории нет — его разворачивает prebuild.
 
+# Запуск: вкладка Actions → Unsigned IPA → Run workflow.
+
 on:
   workflow_dispatch:
     inputs:
