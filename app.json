@@ -51,7 +51,20 @@
         }
       ],
       "./plugins/withMavenMirror",
-      "./plugins/withVolumeKey"
+      "./plugins/withVolumeKey",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

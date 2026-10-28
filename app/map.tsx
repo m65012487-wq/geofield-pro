@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Switch, Alert } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { colors, space, font, radius } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button, QualityBadge } from '../src/components/ui';
@@ -10,11 +9,12 @@ import { useShutter } from '../src/lib/useShutter';
 import { MapCanvas, type MapKnown, type MapPoint } from '../src/components/MapCanvas';
 import { useGnss } from '../src/lib/useGnss';
 import { useActiveProject } from '../src/lib/useActiveProject';
-import { useAverager } from '../src/lib/useAverager';
+import { useShot } from '../src/lib/useShot';
+import { ShotModes } from '../src/components/ShotModes';
 import { useCalibration, localOf } from '../src/lib/calibStore';
 import { loadBasemap, saveBasemap, type Basemap } from '../src/lib/basemap';
 import {
-  listPoints, listCodes, listKnown, kvGet, kvSet, addPoint, nextNamesForCodes,
+  listPoints, listCodes, listKnown, kvGet, kvSet, nextNamesForCodes,
 } from '../src/db/database';
 import type { FeatureCode, KnownPoint, SurveyPoint } from '../src/db/types';
 
@@ -35,11 +35,8 @@ export default function MapScreen() {
   const [known, setKnown] = useState<KnownPoint[]>([]);
   const [basemap, setBasemap] = useState<Basemap | null>(null);
   const [nextNames, setNextNames] = useState<Record<string, string>>({});
-  const [code, setCode] = useState<string | null>(null);
   const [antH, setAntH] = useState(2);
   const [tiltByReceiver, setTiltByReceiver] = useState(false);
-  const [epochs, setEpochs] = useState(2);
-  const [accLimit, setAccLimit] = useState(0.05);
   const [layers, setLayers] = useState({ labels: true, known: true, points: true });
   const [layersOpen, setLayersOpen] = useState(false);
   const [info, setInfo] = useState<{ title: string; lines: string[] } | null>(null);
@@ -54,12 +51,9 @@ export default function MapScreen() {
     listCodes().then((cs) => {
       setCodes(cs);
       nextNamesForCodes(project.id, cs.map((c) => c.code)).then(setNextNames);
-      kvGet('mapCode').then((v) => setCode(v && cs.some((c) => c.code === v) ? v : cs[0]?.code ?? null));
     });
     kvGet('antennaHeight').then((v) => v && setAntH(parseFloat(v)));
     kvGet('tiltByReceiver').then((v) => setTiltByReceiver(v === '1'));
-    kvGet('avgEpochs').then((v) => v && setEpochs(parseInt(v, 10) || 2));
-    kvGet('accLimit').then((v) => v && setAccLimit(parseFloat(v) || 0.05));
     kvGet('floatShutter').then((v) => setFloatOn(v !== '0'));
     kvGet('mapLayers').then((v) => { if (v) try { setLayers(JSON.parse(v)); } catch { /* по умолчанию */ } });
   }, [project?.id]);
@@ -78,43 +72,12 @@ export default function MapScreen() {
   const last = mapPoints[0];
   const dLast = live && last ? Math.hypot(live.north - last.north, live.east - last.east) : null;
 
-  const avg = useAverager(position, epochs, async (m, k) => {
-    if (!project || !code) return;
-    const name = nextNames[code] ?? code;
-    const h = m.elevation - pole;
-    const loc = localOf(calib, m.latitude, m.longitude, h);
-    const save = async () => {
-      await addPoint({
-        projectId: project.id, name, code, latitude: m.latitude, longitude: m.longitude, elevation: h,
-        quality: m.quality, hAccuracy: m.hAccuracy, vAccuracy: m.vAccuracy, epochs: k, note: '',
-        north: loc?.north ?? null, east: loc?.east ?? null, height: loc?.height ?? null,
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      load();
-    };
-    if (m.hAccuracy > accLimit) {
-      Alert.alert('Низкая точность', `${name}: σ ${m.hAccuracy.toFixed(3)} м хуже допуска ${accLimit} м.`, [
-        { text: 'Не сохранять', style: 'cancel' }, { text: 'Сохранить', onPress: save },
-      ]);
-    } else save();
-  });
+  const shot = useShot(position, { projectId: project?.id, calib, pole, codes, onSaved: load });
+  const code = shot.cur && codes.some((c) => c.code === shot.cur) ? shot.cur : null;
 
-  const measure = () => {
-    if (avg.running) { avg.cancel(); return; }
-    if (!code) { Alert.alert('Нет кода', 'Выберите объект сверху.'); return; }
-    if (!position || position.quality === 'none') { Alert.alert('Нет решения', 'Нет данных от приёмника.'); return; }
-    if (position.quality !== 'fix') {
-      Alert.alert(`Нет FIX (${position.quality.toUpperCase()})`, 'Снять точку без фиксированного решения?', [
-        { text: 'Отмена', style: 'cancel' }, { text: 'Снять', onPress: () => avg.start(true) },
-      ]);
-      return;
-    }
-    avg.start(false);
-  };
+  useShutter(shot.trigger);
 
-  useShutter(measure);
-
-  const pickCode = (c: string) => { setCode(c); kvSet('mapCode', c); };
+  const pickCode = (c: string) => shot.setCur(c);
 
   const setLayer = (k: keyof typeof layers, v: boolean) => {
     const next = { ...layers, [k]: v };
@@ -175,6 +138,7 @@ export default function MapScreen() {
           );
         })}
       </ScrollView>
+      <ShotModes shot={shot} />
 
       <View style={{ flex: 1, padding: 6 }} onLayout={(e) => setSize({ w: e.nativeEvent.layout.width - 12, h: e.nativeEvent.layout.height - 12 })}>
         {size.w > 0 && (
@@ -202,17 +166,17 @@ export default function MapScreen() {
           <Cell l="H" v={live ? live.height.toFixed(3) : '—'} />
           <Cell l="до посл." v={dLast != null ? `${dLast.toFixed(2)} м` : '—'} />
         </View>
-        <Pressable onPress={measure}
-          style={({ pressed }) => [styles.measure, { backgroundColor: avg.running ? colors.dangerBg : cur?.color ?? colors.accent, opacity: pressed ? 0.85 : 1 }]}>
-          <Text style={[styles.measureT, avg.running && { color: colors.danger }]}>
-            {avg.running ? `Измерение ${avg.count}/${epochs} — отмена` : `◉ Измерить  ${code ? nextNames[code] ?? code : ''}`}
+        <Pressable onPress={shot.trigger}
+          style={({ pressed }) => [styles.measure, { backgroundColor: shot.running ? colors.dangerBg : cur?.color ?? colors.accent, opacity: pressed ? 0.85 : 1 }]}>
+          <Text style={[styles.measureT, shot.running && { color: colors.danger }]}>
+            {shot.running ? shot.waitingFix ? `Жду FIX — отмена` : `Измерение ${shot.count}/${shot.need} — отмена` : `◉ Измерить  ${code ? nextNames[code] ?? code : ''}`}
           </Text>
         </Pressable>
       </View>
 
       {floatOn && (
-        <FloatingShutter color={cur?.color ?? colors.accent} running={avg.running} onPress={measure}
-          label={avg.running ? `${avg.count}/${epochs}` : code ? nextNames[code] ?? code : '—'} />
+        <FloatingShutter color={cur?.color ?? colors.accent} running={shot.running} onPress={shot.trigger}
+          label={shot.waitingFix ? "FIX…" : shot.running ? `${shot.count}/${shot.need}` : code ? nextNames[code] ?? code : '—'} />
       )}
 
       {/* слои */}

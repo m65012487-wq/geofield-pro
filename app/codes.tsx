@@ -4,20 +4,38 @@ import { useFocusEffect } from 'expo-router';
 import { colors, space, font } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button, Card } from '../src/components/ui';
-import { listCodes, addCode, deleteCode } from '../src/db/database';
+import { listCodes, addCode, deleteCode, kvGet, kvSet } from '../src/db/database';
+import { DEFAULT_CODE_EPOCHS } from '../src/lib/useShot';
 import type { FeatureCode } from '../src/db/types';
 
 const PALETTE = ['#B6F94B', '#4BC0F9', '#F9A64B', '#F94B7E', '#3DDC84', '#B08CFF', '#FFD24B', '#FF6B5C'];
 
-/** Библиотека кодов объектов. */
+/** Библиотека кодов объектов. Нажать код — сколько эпох усреднять для него, удержать — удалить. */
 export default function CodesScreen() {
   const [codes, setCodes] = useState<FeatureCode[]>([]);
   const [modal, setModal] = useState(false);
   const [code, setCode] = useState('');
   const [desc, setDesc] = useState('');
   const [color, setColor] = useState(PALETTE[0]);
+  const [epochs, setEpochs] = useState<Record<string, number>>(DEFAULT_CODE_EPOCHS);
+  const [defEpochs, setDefEpochs] = useState(2);
+  const [epEdit, setEpEdit] = useState<{ code: string; value: string } | null>(null);
 
-  const load = useCallback(() => { listCodes().then(setCodes); }, []);
+  const load = useCallback(() => {
+    listCodes().then(setCodes);
+    kvGet('codeEpochs').then((v) => { if (v) try { setEpochs(JSON.parse(v)); } catch { /* по умолчанию */ } });
+    kvGet('avgEpochs').then((v) => v && setDefEpochs(parseInt(v, 10) || 2));
+  }, []);
+
+  const saveEpochs = async () => {
+    if (!epEdit) return;
+    const n = parseInt(epEdit.value, 10);
+    const next = { ...epochs };
+    if (n >= 1 && n <= 60) next[epEdit.code] = n; else delete next[epEdit.code];
+    setEpochs(next);
+    await kvSet('codeEpochs', JSON.stringify(next));
+    setEpEdit(null);
+  };
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const handleAdd = async () => {
@@ -42,11 +60,13 @@ export default function CodesScreen() {
         keyExtractor={(c) => c.id}
         contentContainerStyle={{ padding: space.lg, paddingBottom: 110 }}
         renderItem={({ item }) => (
-          <Pressable onLongPress={() => confirmDelete(item)}>
+          <Pressable onLongPress={() => confirmDelete(item)}
+            onPress={() => setEpEdit({ code: item.code, value: epochs[item.code] ? String(epochs[item.code]) : '' })}>
             <Card style={styles.row}>
               <View style={[styles.dot, { backgroundColor: item.color }]} />
               <Text style={styles.code}>{item.code}</Text>
               <Text style={styles.desc} numberOfLines={1}>{item.description}</Text>
+              <Text style={[styles.ep, !epochs[item.code] && { color: colors.textMuted }]}>{epochs[item.code] ?? defEpochs} эп.</Text>
             </Card>
           </Pressable>
         )}
@@ -54,6 +74,24 @@ export default function CodesScreen() {
       <View style={styles.fabBar}>
         <Button label="+ Новый код" onPress={() => setModal(true)} />
       </View>
+
+      <Modal visible={epEdit != null} transparent animationType="fade" onRequestClose={() => setEpEdit(null)}>
+        <View style={shared.modalOverlay}>
+          <View style={shared.modalSheet}>
+            <Text style={shared.modalTitle}>Эпох для {epEdit?.code}</Text>
+            <TextInput style={shared.input} value={epEdit?.value ?? ''} keyboardType="number-pad" autoFocus
+              onChangeText={(v) => setEpEdit((e) => (e ? { ...e, value: v } : e))}
+              placeholder={`как в настройках (${defEpochs})`} placeholderTextColor={colors.textMuted} />
+            <Text style={[shared.muted, { marginTop: space.sm }]}>
+              1 эпоха FIX — быстро, для массовых точек. Съезды, реперы, контроль — 3 и больше. Пусто — как в настройках.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: space.md, marginTop: space.lg }}>
+              <Button label="Отмена" variant="secondary" onPress={() => setEpEdit(null)} style={{ flex: 1 }} />
+              <Button label="Сохранить" onPress={saveEpochs} style={{ flex: 1 }} />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={modal} transparent animationType="slide" onRequestClose={() => setModal(false)}>
         <View style={shared.modalOverlay}>
@@ -88,6 +126,7 @@ const styles = StyleSheet.create({
   dot: { width: 16, height: 16, borderRadius: 8 },
   code: { color: colors.textPrimary, fontSize: font.bodyLg, fontWeight: '800', minWidth: 70 },
   desc: { color: colors.textSecondary, fontSize: font.body, flex: 1 },
+  ep: { color: colors.textPrimary, fontSize: font.small, fontWeight: '800' },
   fabBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     paddingHorizontal: space.lg, paddingVertical: space.md,

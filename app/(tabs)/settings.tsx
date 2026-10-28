@@ -5,6 +5,7 @@ import { colors, space, font } from '../../src/theme/theme';
 import { shared } from '../../src/theme/shared';
 import { Card, Button } from '../../src/components/ui';
 import { kvGet, kvSet } from '../../src/db/database';
+import { DEFAULT_SEQ } from '../../src/lib/useShot';
 
 /** Настройки съёмки: число эпох усреднения и порог точности. */
 export default function SettingsScreen() {
@@ -13,6 +14,10 @@ export default function SettingsScreen() {
   const [tilt, setTilt] = useState(false);
   const [volKey, setVolKey] = useState(true);
   const [floatBtn, setFloatBtn] = useState(true);
+  const [voice, setVoice] = useState(true);
+  const [waitFix, setWaitFix] = useState(true);
+  const [seq, setSeq] = useState(DEFAULT_SEQ);
+  const [autoStep, setAutoStep] = useState('5');
 
   useFocusEffect(useCallback(() => {
     kvGet('avgEpochs').then((v) => v && setEpochs(v));
@@ -20,6 +25,10 @@ export default function SettingsScreen() {
     kvGet('tiltByReceiver').then((v) => setTilt(v === '1'));
     kvGet('volumeShutter').then((v) => setVolKey(v !== '0'));
     kvGet('floatShutter').then((v) => setFloatBtn(v !== '0'));
+    kvGet('voice').then((v) => setVoice(v !== '0'));
+    kvGet('waitFix').then((v) => setWaitFix(v !== '0'));
+    kvGet('shotSeq').then((v) => v && setSeq(v));
+    kvGet('autoStep').then((v) => v && setAutoStep(v));
   }, []));
 
   const save = async () => {
@@ -30,6 +39,14 @@ export default function SettingsScreen() {
     await kvSet('tiltByReceiver', tilt ? '1' : '0');
     await kvSet('volumeShutter', volKey ? '1' : '0');
     await kvSet('floatShutter', floatBtn ? '1' : '0');
+    await kvSet('voice', voice ? '1' : '0');
+    await kvSet('waitFix', waitFix ? '1' : '0');
+    const sq = seq.split(/[,\s→>]+/).map((x) => x.trim().toUpperCase()).filter(Boolean).join(',') || DEFAULT_SEQ;
+    await kvSet('shotSeq', sq);
+    setSeq(sq);
+    const st = Math.max(0.5, Math.min(500, parseFloat(autoStep.replace(',', '.')) || 5));
+    await kvSet('autoStep', String(st));
+    setAutoStep(String(st));
     setEpochs(String(e));
     setAccLimit(String(a));
     Alert.alert('Сохранено', `Эпох на точку: ${e}\nДопуск σ: ${a} м\nВеха: ${tilt ? 'учитывает приёмник' : 'вычитает программа'}`);
@@ -62,12 +79,13 @@ export default function SettingsScreen() {
           не меняются, компенсация работает.
         </Text>
         <View style={styles.switchRow}>
-          <Text style={[shared.label, { flex: 1, marginTop: 0 }]}>Клавиша «громкость −» снимает точку</Text>
+          <Text style={[shared.label, { flex: 1, marginTop: 0 }]}>Клавиши громкости снимают точку</Text>
           <Switch value={volKey} onValueChange={setVolKey} />
         </View>
         <Text style={styles.hintText}>
-          На экранах «Съёмка» и «Карта» (Android): снимает текущий объект, повторное нажатие во время
-          измерения — отмена. На других экранах клавиша работает как обычно.
+          На экранах «Съёмка» и «Карта» (Android): «громкость −» или «+» снимает текущий объект, повторное
+          нажатие во время измерения — отмена. Bluetooth-пульт для селфи работает так же. На других экранах
+          клавиши работают как обычно.
         </Text>
         <View style={styles.switchRow}>
           <Text style={[shared.label, { flex: 1, marginTop: 0 }]}>Плавающая кнопка «Измерить»</Text>
@@ -75,6 +93,37 @@ export default function SettingsScreen() {
         </View>
         <Text style={styles.hintText}>
           Круглая кнопка поверх «Съёмки» и «Карты»: нажать — снять, потащить пальцем — переставить в удобное место.
+        </Text>
+        <View style={styles.switchRow}>
+          <Text style={[shared.label, { flex: 1, marginTop: 0 }]}>Голос и сигналы</Text>
+          <Switch value={voice} onValueChange={setVoice} />
+        </View>
+        <Text style={styles.hintText}>
+          Сигнал на старте, двойной — точка записана, низкий — ошибка. Голосом: «Дорога 15. Дальше обочина
+          справа». Выключено — только сигналы и вибрация.
+        </Text>
+        <View style={styles.switchRow}>
+          <Text style={[shared.label, { flex: 1, marginTop: 0 }]}>Без FIX — ждать, а не спрашивать</Text>
+          <Switch value={waitFix} onValueChange={setWaitFix} />
+        </View>
+        <Text style={styles.hintText}>
+          Нажали без FIX — программа ждёт фиксированное решение и снимает сама. Выключено — спрашивает,
+          снимать ли по FLOAT.
+        </Text>
+        <Text style={shared.label}>Порядок поперечника (коды через запятую)</Text>
+        <TextInput style={shared.input} value={seq} onChangeText={setSeq} autoCapitalize="characters"
+          placeholder={DEFAULT_SEQ} placeholderTextColor={colors.textMuted} />
+        <Text style={styles.hintText}>
+          Кнопка «⟳» на «Съёмке» и «Карте»: после каждой точки объект сам переходит к следующему по этому
+          порядку, после последнего — снова к первому (следующий пикет).
+        </Text>
+        <Text style={shared.label}>Шаг автосъёмки, м</Text>
+        <TextInput style={shared.input} value={autoStep} onChangeText={setAutoStep}
+          keyboardType="decimal-pad" placeholderTextColor={colors.textMuted} />
+        <Text style={styles.hintText}>
+          Кнопка «Авто»: точка текущего объекта пишется сама каждые столько метров (одна эпоха FIX в допуске).
+          «По остановке»: телефон на вехе — понесли и поставили, через 1,5 с неподвижности замер начнётся сам.
+          Число эпох для каждого объекта — в «Работа → Коды».
         </Text>
         <Button label="Сохранить" onPress={save} style={{ marginTop: space.lg }} />
       </Card>

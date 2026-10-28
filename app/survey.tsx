@@ -3,12 +3,13 @@ import {
   View, Text, StyleSheet, ScrollView, Alert, TextInput, Modal, Pressable,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { colors, space, font, radius } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button, QualityBadge } from '../src/components/ui';
 import { FloatingShutter } from '../src/components/FloatingShutter';
 import { useShutter } from '../src/lib/useShutter';
+import { useShot } from '../src/lib/useShot';
+import { ShotModes } from '../src/components/ShotModes';
 import { SurveyCanvas } from '../src/components/SurveyCanvas';
 import { MapCanvas, type MapPoint } from '../src/components/MapCanvas';
 import { loadBasemap, type Basemap } from '../src/lib/basemap';
@@ -22,7 +23,6 @@ import type { SurveyPoint, Feature, FeatureCode, LivePosition, FixQuality } from
 import { useCalibration, localOf } from '../src/lib/calibStore';
 
 const CANVAS_H = 220;
-const QUALITY_RANK: Record<FixQuality, number> = { fix: 3, float: 2, single: 1, none: 0 };
 
 /**
  * Съёмка точек как в LandStar: сетка кнопок объектов. Нажал кнопку — приёмник
@@ -42,21 +42,15 @@ export default function SurveyScreen() {
   const [nextNames, setNextNames] = useState<Record<string, string>>({});
   const [canvasW, setCanvasW] = useState(0);
   const [basemap, setBasemap] = useState<Basemap | null>(null);
-  const [avgEpochs, setAvgEpochs] = useState(2);
-  const [accLimit, setAccLimit] = useState(0.05);
   const [antH, setAntH] = useState(2.0);
   // приёмник с компенсацией наклона уже даёт остриё вехи — тогда веху не вычитаем
   const [tiltByReceiver, setTiltByReceiver] = useState(false);
   const pole = tiltByReceiver ? 0 : antH;
 
-  // Усреднение: копим эпохи из живого потока (каждая новая позиция — эпоха)
-  const [sampling, setSampling] = useState<{ code: string | null; anyQuality: boolean } | null>(null);
-  const [samples, setSamples] = useState<LivePosition[]>([]);
-  const lastTs = useRef(0);
-
   // Ручной режим и правка
   const [saving, setSaving] = useState(false);
   const [avg, setAvg] = useState<LivePosition | null>(null);
+  const [avgN, setAvgN] = useState(1);
   const [ptName, setPtName] = useState('');
   const [ptCode, setPtCode] = useState('');
   const [ptNote, setPtNote] = useState('');
@@ -64,8 +58,6 @@ export default function SurveyScreen() {
   const [codePicker, setCodePicker] = useState(false);
   const [antEdit, setAntEdit] = useState<string | null>(null);
   const [numEdit, setNumEdit] = useState<{ code: string; value: string } | null>(null);
-  // текущий объект для плавающей кнопки и клавиши громкости — общий с «Картой»
-  const [curCode, setCurCode] = useState<string | null>(null);
   const [floatOn, setFloatOn] = useState(true);
 
   const load = useCallback(() => {
@@ -76,100 +68,30 @@ export default function SurveyScreen() {
       setCodes(cs);
       nextNamesForCodes(project.id, cs.map((c) => c.code)).then(setNextNames);
     });
-    kvGet('avgEpochs').then((v) => v && setAvgEpochs(parseInt(v, 10) || 2));
     kvGet('tiltByReceiver').then((v) => setTiltByReceiver(v === '1'));
-    kvGet('accLimit').then((v) => v && setAccLimit(parseFloat(v) || 0.05));
     kvGet('antennaHeight').then((v) => v && setAntH(parseFloat(v)));
-    kvGet('mapCode').then((v) => v && setCurCode(v));
     kvGet('floatShutter').then((v) => setFloatOn(v !== '0'));
     loadBasemap(project.id).then(setBasemap);
   }, [project?.id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  // Новая эпоха -> в выборку
-  useEffect(() => {
-    if (!sampling || !position || position.timestamp === lastTs.current) return;
-    lastTs.current = position.timestamp;
-    if (!sampling.anyQuality && position.quality !== 'fix') {
-      setSamples([]); // FIX потерян — начинаем заново
-      return;
-    }
-    setSamples((prev) => [...prev, position]);
-  }, [position, sampling]);
-
-  const begin = (code: string | null) => {
-    const p = position;
-    if (!p || p.quality === 'none') {
-      Alert.alert('Нет решения', 'Нет данных от приёмника.');
-      return;
-    }
-    if (code) { setCurCode(code); kvSet('mapCode', code); }
-    const go = (any: boolean) => {
-      lastTs.current = p.timestamp;
-      setSamples([]);
-      setSampling({ code, anyQuality: any });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    };
-    if (p.quality !== 'fix') {
-      Alert.alert(`Нет FIX (${p.quality.toUpperCase()})`, 'Снять точку без фиксированного решения?', [
-        { text: 'Отмена', style: 'cancel' },
-        { text: 'Снять', onPress: () => go(true) },
-      ]);
-      return;
-    }
-    go(false);
-  };
-
-  const cancel = () => { setSampling(null); setSamples([]); };
-
-  // Выборка набрана
-  useEffect(() => {
-    if (!sampling || samples.length < avgEpochs || !project) return;
-    const n = samples.length;
-    const mean = (sel: (p: LivePosition) => number) => samples.reduce((a, p) => a + sel(p), 0) / n;
-    const worst = samples.reduce<FixQuality>(
-      (w, p) => (QUALITY_RANK[p.quality] < QUALITY_RANK[w] ? p.quality : w), 'fix');
-    const result: LivePosition = {
-      latitude: mean((p) => p.latitude),
-      longitude: mean((p) => p.longitude),
-      elevation: mean((p) => p.elevation) - pole,
-      hAccuracy: Math.max(...samples.map((p) => p.hAccuracy)),
-      vAccuracy: Math.max(...samples.map((p) => p.vAccuracy)),
-      quality: worst,
-      satellites: Math.min(...samples.map((p) => p.satellites ?? 0)),
-      timestamp: Date.now(),
-    };
-    const code = sampling.code;
-    setSampling(null);
-    setSamples([]);
-
-    if (code == null) {
-      // ручной режим — форма с именем
-      setAvg(result);
+  // съёмка — общий движок с «Картой»: эпохи по объекту, ожидание FIX, звук, поперечник, авто
+  const shot = useShot(position, {
+    projectId: project?.id, calib, pole, codes, onSaved: load,
+    onManual: (r, n) => {
+      if (!project) return;
+      setAvg(r); setAvgN(n);
       suggestPointName(project.id).then((nm) => { setPtName(nm); setPtCode(''); setPtNote(''); setSaving(true); });
-      return;
-    }
-    const name = nextNames[code] ?? code;
-    const loc = localOf(calib, result.latitude, result.longitude, result.elevation);
-    const save = async () => {
-      await addPoint({
-        projectId: project.id, name, code,
-        latitude: result.latitude, longitude: result.longitude, elevation: result.elevation,
-        quality: result.quality, hAccuracy: result.hAccuracy, vAccuracy: result.vAccuracy,
-        epochs: n, note: '', north: loc?.north ?? null, east: loc?.east ?? null, height: loc?.height ?? null,
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      load();
-    };
-    if (result.hAccuracy > accLimit) {
-      Alert.alert('Низкая точность', `${name}: σ план ${result.hAccuracy.toFixed(3)} м хуже допуска ${accLimit} м.`, [
-        { text: 'Не сохранять', style: 'cancel' },
-        { text: 'Сохранить', onPress: save },
-      ]);
-    } else {
-      save();
-    }
-  }, [samples, sampling, avgEpochs, accLimit, pole, project, nextNames, calib]);
+    },
+  });
+  const sampling = shot.running ? { code: shot.runningCode } : null;
+  const curCode = shot.cur;
+  const cancel = shot.cancel;
+  const begin = (code: string | null) => {
+    if (shot.running) return;
+    if (code) shot.setCur(code);
+    shot.start(code);
+  };
 
   const handleManualSave = async () => {
     if (!avg || !project) return;
@@ -178,7 +100,7 @@ export default function SurveyScreen() {
       projectId: project.id, name: ptName.trim() || 'PT', code: ptCode.trim(),
       latitude: avg.latitude, longitude: avg.longitude, elevation: avg.elevation,
       quality: avg.quality, hAccuracy: avg.hAccuracy, vAccuracy: avg.vAccuracy,
-      epochs: avgEpochs, note: ptNote.trim(), north: loc?.north ?? null, east: loc?.east ?? null, height: loc?.height ?? null,
+      epochs: avgN, note: ptNote.trim(), north: loc?.north ?? null, east: loc?.east ?? null, height: loc?.height ?? null,
     });
     setSaving(false); setAvg(null);
     load();
@@ -204,12 +126,7 @@ export default function SurveyScreen() {
     ]);
   };
 
-  const shoot = () => {
-    if (sampling) { cancel(); return; }
-    if (!curCode || !codes.some((c) => c.code === curCode)) { Alert.alert('Нет объекта', 'Нажмите плитку объекта — дальше кнопка и клавиша громкости снимают тот же объект.'); return; }
-    begin(curCode);
-  };
-  useShutter(shoot);
+  useShutter(shot.trigger);
 
   if (!project) {
     return (
@@ -246,6 +163,7 @@ export default function SurveyScreen() {
         </Pressable>
       </Pressable>
 
+      <ShotModes shot={shot} />
       <ScrollView contentContainerStyle={{ padding: space.md, paddingBottom: 110 }}>
         <View onLayout={(e) => setCanvasW(e.nativeEvent.layout.width)} style={{ marginBottom: space.md }}>
           {canvasW > 0 && (calib?.cal || basemap ? (
@@ -274,14 +192,14 @@ export default function SurveyScreen() {
                 <View style={[styles.tileStripe, { backgroundColor: c.color }]} />
                 <Text style={styles.tileTitle} numberOfLines={2}>{c.description || c.code}</Text>
                 <Text style={[styles.tileNext, { color: c.color }]}>
-                  {active ? `${samples.length}/${avgEpochs}` : nextNames[c.code] ?? c.code}
+                  {active ? (shot.waitingFix ? 'FIX…' : `${shot.count}/${shot.need}`) : nextNames[c.code] ?? c.code}
                 </Text>
               </Pressable>
             );
           })}
         </View>
         <Text style={[shared.muted, { marginTop: space.sm }]}>
-          Нажать — снять точку ({avgEpochs} эп. FIX). Удержать — задать номер.
+          Нажать — снять точку (эпох по объекту, ждёт FIX). Удержать — задать номер.
         </Text>
 
         {last && (
@@ -300,7 +218,7 @@ export default function SurveyScreen() {
 
       <View style={styles.captureBar}>
         <Button
-          label={sampling ? `Усреднение… ${samples.length}/${avgEpochs} — отмена` : '◉  СНЯТЬ ТОЧКУ (своё имя)'}
+          label={sampling ? (shot.waitingFix ? 'Жду FIX — отмена' : `Усреднение… ${shot.count}/${shot.need} — отмена`) : '◉  СНЯТЬ ТОЧКУ (своё имя)'}
           onPress={sampling ? cancel : () => begin(null)}
           variant={sampling ? 'danger' : 'secondary'}
         />
@@ -309,8 +227,8 @@ export default function SurveyScreen() {
       {floatOn && (() => {
         const cc = codes.find((c) => c.code === curCode);
         return (
-          <FloatingShutter color={cc?.color ?? colors.accent} running={sampling != null} onPress={shoot}
-            label={sampling ? `${samples.length}/${avgEpochs}` : cc ? nextNames[cc.code] ?? cc.code : '—'} />
+          <FloatingShutter color={cc?.color ?? colors.accent} running={sampling != null} onPress={shot.trigger}
+            label={shot.waitingFix ? 'FIX…' : sampling ? `${shot.count}/${shot.need}` : cc ? nextNames[cc.code] ?? cc.code : '—'} />
         );
       })()}
 

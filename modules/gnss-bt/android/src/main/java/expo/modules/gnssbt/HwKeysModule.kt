@@ -5,7 +5,7 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 /**
- * Клавиша «громкость −» как спуск съёмки (как в LandStar). Пока экран съёмки включил перехват,
+ * Клавиши громкости (и «камера» пульта) как спуск съёмки (как в LandStar). Пока экран съёмки включил перехват,
  * нажатие уходит в JS событием onKey, а громкость не меняется; в остальное время клавиша обычная.
  */
 class HwKeysModule : Module() {
@@ -16,11 +16,18 @@ class HwKeysModule : Module() {
     /** Вызывается из MainActivity.dispatchKeyEvent — его вставляет плагин plugins/withVolumeKey.js. */
     @JvmStatic
     fun onKey(event: KeyEvent): Boolean {
-      if (!enabled || event.keyCode != KeyEvent.KEYCODE_VOLUME_DOWN) return false
+      // «громкость −» на телефоне; «громкость +» и «камера» шлют Bluetooth-пульты для селфи
+      val key = when (event.keyCode) {
+        KeyEvent.KEYCODE_VOLUME_DOWN -> "volumeDown"
+        KeyEvent.KEYCODE_VOLUME_UP -> "volumeUp"
+        KeyEvent.KEYCODE_CAMERA -> "camera"
+        else -> return false
+      }
+      if (!enabled) return false
       val m = instance ?: return false
       // удержание даёт повторы — снимаем один раз на нажатие; отпускание тоже глотаем
       if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-        m.sendEvent("onKey", mapOf("key" to "volumeDown"))
+        m.sendEvent("onKey", mapOf("key" to key))
       }
       return true
     }
