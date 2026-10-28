@@ -6,7 +6,7 @@ import { colors, space, font, radius } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button } from '../src/components/ui';
 import { useActiveProject } from '../src/lib/useActiveProject';
-import { loadBasemap, parseDxf, saveBasemap, type Basemap } from '../src/lib/basemap';
+import { fileTitle, loadBasemap, parseDxf, saveBasemap, type Basemap } from '../src/lib/basemap';
 
 /** Подложка проекта (как «Карты-подложки» в LandStar): DXF в местных координатах, слои вкл/выкл. */
 export default function BasemapScreen() {
@@ -25,7 +25,7 @@ export default function BasemapScreen() {
       const f = Array.isArray(picked) ? picked[0] : picked;
       if (!f) return;
       setBusy(true);
-      const name = decodeURIComponent(f.uri.split('/').pop() ?? 'plan.dxf');
+      const name = fileTitle(f.uri, 'план DXF');
       const parsed = parseDxf(await f.text(), name);
       saveBasemap(project.id, parsed);
       setBm(parsed);

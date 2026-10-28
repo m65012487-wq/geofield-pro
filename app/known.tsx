@@ -7,6 +7,7 @@ import { shared } from '../src/theme/shared';
 import { Button } from '../src/components/ui';
 import { useActiveProject } from '../src/lib/useActiveProject';
 import { listKnown, replaceKnown } from '../src/db/database';
+import { fileTitle } from '../src/lib/basemap';
 import { parseKnown } from '../src/lib/importKnown';
 import type { KnownPoint } from '../src/db/types';
 
@@ -32,7 +33,7 @@ export default function KnownScreen() {
       const { points, skipped } = parseKnown(await file.text());
       if (points.length === 0) { Alert.alert('Пусто', 'В файле не найдено ни одного пункта «имя N E H».'); return; }
       Alert.alert('Импорт реперов',
-        `${decodeURIComponent(file.uri.split("/").pop() ?? "")}: ${points.length} пунктов${skipped ? `, пропущено строк: ${skipped}` : ''}.\nТекущий список проекта будет заменён.`, [
+        `${fileTitle(file.uri, "Файл")}: ${points.length} пунктов${skipped ? `, пропущено строк: ${skipped}` : ''}.\nТекущий список проекта будет заменён.`, [
           { text: 'Отмена', style: 'cancel' },
           { text: 'Заменить', onPress: async () => { await replaceKnown(project.id, points); load(); } },
         ]);

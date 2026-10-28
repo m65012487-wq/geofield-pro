@@ -131,3 +131,10 @@ export function saveBasemap(pid: string, bm: Basemap | null) {
   if (bm) { f.create(); f.write(JSON.stringify(bm)); }
   cache.set(pid, bm);
 }
+
+/** Имя файла из URI выбора файлов: «primary:Download/x.dxf» -> «x.dxf»; у «msf:123» имени нет. */
+export function fileTitle(uri: string, fallback: string): string {
+  const last = decodeURIComponent(uri.split('/').pop() ?? '');
+  const tail = last.split(':').pop()?.split('/').pop() ?? '';
+  return /\.[A-Za-z0-9]{2,5}$/.test(tail) ? tail : fallback;
+}

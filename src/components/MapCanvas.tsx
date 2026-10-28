@@ -17,11 +17,17 @@ interface Props {
   target?: { north: number; east: number } | null;
 }
 
-const ZOOMS = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50]; // метров на пиксель
+const ZOOMS = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100]; // метров на пиксель
 
 /** Карта в местных координатах (север вверх): подложка DXF, точки, позиция. Перетаскивание и масштаб кнопками. */
 export function MapCanvas({ width, height, here, points, basemap, target }: Props) {
-  const [zi, setZi] = useState(3);
+  // без позиции — сразу весь план, иначе ~0.5 м/px вокруг себя
+  const [zi, setZi] = useState(() => {
+    if (here || !basemap) return 3;
+    const need = Math.max((basemap.bbox[2] - basemap.bbox[0]) / width, (basemap.bbox[3] - basemap.bbox[1]) / height) * 1.1;
+    const i = ZOOMS.findIndex((z) => z >= need);
+    return i < 0 ? ZOOMS.length - 1 : i;
+  });
   const [follow, setFollow] = useState(true);
   const [center, setCenter] = useState<{ n: number; e: number } | null>(null);
   const mpp = ZOOMS[zi];
