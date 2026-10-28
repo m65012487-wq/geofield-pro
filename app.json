@@ -62,7 +62,7 @@
       [
         "expo-sensors",
         {
-          "motionPermission": false
+          "motionPermission": "GeoField Pro использует датчик движения, чтобы начинать замер, когда веха остановилась."
         }
       ]
     ],
