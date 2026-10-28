@@ -18,10 +18,11 @@ async function writeAndShare(filename: string, content: string, mime: string): P
 
 /** Экспорт точек в CSV: имя, код, широта, долгота, высота, точность, качество, дата. */
 export async function exportPointsCsv(project: Project, points: SurveyPoint[]): Promise<void> {
-  const header = 'Name,Code,Latitude,Longitude,Elevation,HAccuracy,Quality,Epochs,Note,Timestamp';
+  const header = 'Name,Code,North,East,Height,Latitude,Longitude,Elevation,HAccuracy,Quality,Epochs,Note,Timestamp';
   const lines = points.map((p) =>
     [
       p.name, p.code,
+      p.north != null ? p.north.toFixed(3) : '', p.east != null ? p.east.toFixed(3) : '', p.height != null ? p.height.toFixed(3) : '',
       p.latitude.toFixed(8), p.longitude.toFixed(8), p.elevation.toFixed(3),
       p.hAccuracy.toFixed(3), p.quality, p.epochs,
       `"${p.note.replace(/"/g, '""')}"`,
@@ -30,6 +31,20 @@ export async function exportPointsCsv(project: Project, points: SurveyPoint[]): 
   );
   const csv = [header, ...lines].join('\n');
   await writeAndShare(`${sanitize(project.name)}_points.csv`, csv, 'text/csv');
+}
+
+/**
+ * Каталог в местной системе в том же виде, что выгрузки съёмки объекта: «имя,N,E,H,код» —
+ * открывается скриптами и AutoCAD-импортом без переделок. Точки без калибровки пропускаются.
+ */
+export async function exportLocalTxt(project: Project, points: SurveyPoint[]): Promise<number> {
+  const rows = points.filter((p) => p.north != null && p.east != null && p.height != null)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((p) => `${p.name},${p.north!.toFixed(3)},${p.east!.toFixed(3)},${p.height!.toFixed(3)},${p.code}`);
+  if (!rows.length) throw new Error('Нет точек с местными координатами — сначала калибровка');
+  const CRLF = String.fromCharCode(13, 10);
+  await writeAndShare(`${sanitize(project.name)}_NEH.txt`, rows.join(CRLF) + CRLF, 'text/plain');
+  return rows.length;
 }
 
 /** Экспорт всего проекта в GeoJSON (точки + линии + полигоны). */

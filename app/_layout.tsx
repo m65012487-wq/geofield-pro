@@ -53,6 +53,10 @@ export default function RootLayout() {
           <Stack.Screen name="features" options={{ title: 'Линии и полигоны' }} />
           <Stack.Screen name="stakeout" options={{ title: 'Вынос точки' }} />
           <Stack.Screen name="codes" options={{ title: 'Библиотека кодов' }} />
+          <Stack.Screen name="receiver" options={{ title: 'Приёмник' }} />
+          <Stack.Screen name="calibration" options={{ title: 'Калибровка' }} />
+          <Stack.Screen name="known" options={{ title: 'Реперы' }} />
+          <Stack.Screen name="basemap" options={{ title: 'Подложка' }} />
           <Stack.Screen name="export" options={{ title: 'Экспорт' }} />
           <Stack.Screen name="cogo/pgz" options={{ title: 'ПГЗ — прямая задача' }} />
           <Stack.Screen name="cogo/ogz" options={{ title: 'ОГЗ — обратная задача' }} />

@@ -6,7 +6,7 @@ import { shared } from '../src/theme/shared';
 import { Button, Card } from '../src/components/ui';
 import { useActiveProject } from '../src/lib/useActiveProject';
 import { listPoints, listFeatures } from '../src/db/database';
-import { exportPointsCsv, exportGeoJson } from '../src/lib/exporter';
+import { exportPointsCsv, exportGeoJson, exportLocalTxt } from '../src/lib/exporter';
 import type { SurveyPoint, Feature } from '../src/db/types';
 
 /** Экспорт проекта: CSV точек и GeoJSON (точки + линии + полигоны). */
@@ -14,7 +14,7 @@ export default function ExportScreen() {
   const { project } = useActiveProject();
   const [points, setPoints] = useState<SurveyPoint[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
-  const [busy, setBusy] = useState<'csv' | 'geojson' | null>(null);
+  const [busy, setBusy] = useState<'csv' | 'geojson' | 'txt' | null>(null);
 
   const load = useCallback(() => {
     if (!project) return;
@@ -23,15 +23,16 @@ export default function ExportScreen() {
   }, [project?.id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const run = async (kind: 'csv' | 'geojson') => {
+  const run = async (kind: 'csv' | 'geojson' | 'txt') => {
     if (!project) return;
-    if (kind === 'csv' && points.length === 0) {
+    if (kind !== 'geojson' && points.length === 0) {
       Alert.alert('Нет данных', 'В проекте нет точек для экспорта.');
       return;
     }
     setBusy(kind);
     try {
-      if (kind === 'csv') await exportPointsCsv(project, points);
+      if (kind === 'txt') await exportLocalTxt(project, points);
+      else if (kind === 'csv') await exportPointsCsv(project, points);
       else await exportGeoJson(project, points, features);
     } catch (e) {
       Alert.alert('Ошибка экспорта', e instanceof Error ? e.message : 'Неизвестная ошибка');
@@ -61,9 +62,18 @@ export default function ExportScreen() {
       </Card>
 
       <Card style={{ marginTop: space.lg }}>
+        <Text style={styles.fmtTitle}>TXT — каталог N, E, H (МСК)</Text>
+        <Text style={styles.fmtDesc}>
+          Строки «имя,N,E,H,код» в местной системе по калибровке — как выгрузки съёмки для AutoCAD и скриптов.
+        </Text>
+        <Button label="Экспорт каталога" onPress={() => run('txt')} loading={busy === 'txt'}
+          style={{ marginTop: space.md }} />
+      </Card>
+
+      <Card style={{ marginTop: space.lg }}>
         <Text style={styles.fmtTitle}>CSV — точки</Text>
         <Text style={styles.fmtDesc}>
-          Таблица: имя, код, широта, долгота, высота, точность, качество. Открывается в Excel, AutoCAD, Credo.
+          Таблица: имя, код, N/E/H местные, широта, долгота, высота, точность, качество. Открывается в Excel, AutoCAD, Credo.
         </Text>
         <Button label="Экспорт CSV" onPress={() => run('csv')} loading={busy === 'csv'}
           style={{ marginTop: space.md }} />

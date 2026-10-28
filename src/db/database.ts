@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import type { Project, SurveyPoint, Feature, FeatureCode, Vertex } from './types';
+import type { Project, SurveyPoint, Feature, FeatureCode, Vertex, KnownPoint } from './types';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -8,14 +8,16 @@ function getDb(): Promise<SQLite.SQLiteDatabase> {
   return dbPromise;
 }
 
+// Объекты съёмки по дороге Чегем II – Булунгу; порядок = порядок кнопок на экране съёмки.
+// Обочины — лево/право по ходу пикетажа.
 const DEFAULT_CODES: Array<[string, string, string]> = [
-  ['STN', 'Станция/репер', '#B6F94B'],
-  ['УГОЛ', 'Угол здания/участка', '#4BC0F9'],
-  ['СТЛБ', 'Столб', '#F9A64B'],
-  ['КЛДЦ', 'Колодец', '#F94B7E'],
-  ['ДРВ', 'Дерево', '#3DDC84'],
-  ['ЗАБОР', 'Ограждение', '#B08CFF'],
-  ['ДОР', 'Кромка дороги', '#FFD24B'],
+  ['DOR', 'Дорога', '#E53935'],
+  ['DASF', 'Доп. асфальт', '#D81B60'],
+  ['OTK', 'Отсыпка кювета', '#A1887F'],
+  ['KUV', 'Кювет', '#1E88E5'],
+  ['SEZ', 'Съезд готовый', '#43A047'],
+  ['OBL', 'Обочина слева', '#FB8C00'],
+  ['OBP', 'Обочина справа', '#00ACC1'],
 ];
 
 export async function initDatabase(): Promise<void> {
@@ -68,7 +70,22 @@ export async function initDatabase(): Promise<void> {
       key TEXT PRIMARY KEY NOT NULL,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS known_points (
+      id TEXT PRIMARY KEY NOT NULL,
+      projectId TEXT NOT NULL,
+      name TEXT NOT NULL,
+      north REAL NOT NULL,
+      east REAL NOT NULL,
+      height REAL NOT NULL,
+      FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_known_project ON known_points(projectId);
   `);
+  // Местные координаты точки (по калибровке на момент съёмки); у старых БД колонок нет
+  const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(points)');
+  for (const c of ['north', 'east', 'height']) {
+    if (!cols.some((x) => x.name === c)) await db.execAsync(`ALTER TABLE points ADD COLUMN ${c} REAL`);
+  }
   // Заполняем библиотеку кодов при первом запуске
   const row = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) AS c FROM codes');
   if ((row?.c ?? 0) === 0) {
@@ -174,16 +191,17 @@ export async function addPoint(p: Omit<SurveyPoint, 'id' | 'createdAt'>): Promis
   const db = await getDb();
   const point: SurveyPoint = { ...p, id: uid(), createdAt: Date.now() };
   await db.runAsync(
-    `INSERT INTO points (id, projectId, name, code, latitude, longitude, elevation, quality, hAccuracy, vAccuracy, epochs, note, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO points (id, projectId, name, code, latitude, longitude, elevation, quality, hAccuracy, vAccuracy, epochs, note, createdAt, north, east, height)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [point.id, point.projectId, point.name, point.code, point.latitude, point.longitude,
-     point.elevation, point.quality, point.hAccuracy, point.vAccuracy, point.epochs, point.note, point.createdAt]
+     point.elevation, point.quality, point.hAccuracy, point.vAccuracy, point.epochs, point.note, point.createdAt,
+     point.north ?? null, point.east ?? null, point.height ?? null]
   );
   await touchProject(point.projectId);
   return point;
 }
 
-export async function updatePoint(id: string, fields: Partial<Pick<SurveyPoint, 'name' | 'code' | 'note' | 'elevation'>>): Promise<void> {
+export async function updatePoint(id: string, fields: Partial<Pick<SurveyPoint, 'name' | 'code' | 'note' | 'elevation' | 'north' | 'east' | 'height'>>): Promise<void> {
   const db = await getDb();
   const sets: string[] = [];
   const vals: (string | number)[] = [];
@@ -205,6 +223,34 @@ export async function deletePoint(id: string, projectId: string): Promise<void> 
 export async function suggestPointName(projectId: string): Promise<string> {
   const n = await countPoints(projectId);
   return 'PT' + String(n + 1).padStart(3, '0');
+}
+
+/**
+ * Имя следующей точки объекта: код + номер, у каждого кода свой счёт (DOR15, KUV3).
+ * Номер — больше всех уже снятых с этим префиксом, но не меньше заданного вручную.
+ */
+export async function nextNameForCode(projectId: string, code: string): Promise<string> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ name: string }>(
+    'SELECT name FROM points WHERE projectId = ? AND substr(name, 1, ?) = ?', [projectId, code.length, code]);
+  let max = 0;
+  for (const r of rows) {
+    const tail = r.name.slice(code.length);
+    if (/^\d+$/.test(tail)) max = Math.max(max, parseInt(tail, 10));
+  }
+  const start = parseInt((await kvGet(`start:${projectId}:${code}`)) ?? '1', 10) || 1;
+  return code + Math.max(max + 1, start);
+}
+
+export async function setNextNumber(projectId: string, code: string, n: number): Promise<void> {
+  await kvSet(`start:${projectId}:${code}`, String(n));
+}
+
+/** Все следующие имена разом — для кнопок объектов. */
+export async function nextNamesForCodes(projectId: string, codes: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const c of codes) out[c] = await nextNameForCode(projectId, c);
+  return out;
 }
 
 // ---------- Линии и полигоны ----------
@@ -257,7 +303,7 @@ export async function countFeatures(projectId: string, type: 'line' | 'polygon')
 
 export async function listCodes(): Promise<FeatureCode[]> {
   const db = await getDb();
-  return db.getAllAsync<FeatureCode>('SELECT * FROM codes ORDER BY code');
+  return db.getAllAsync<FeatureCode>('SELECT * FROM codes ORDER BY rowid');
 }
 
 export async function addCode(code: string, description: string, color: string): Promise<void> {
@@ -269,4 +315,30 @@ export async function addCode(code: string, description: string, color: string):
 export async function deleteCode(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM codes WHERE id = ?', [id]);
+}
+
+// ---------- Известные пункты (реперы ГРО) ----------
+
+export async function listKnown(projectId: string, search = ''): Promise<KnownPoint[]> {
+  const db = await getDb();
+  const q = `%${search.trim()}%`;
+  return db.getAllAsync<KnownPoint>(
+    'SELECT * FROM known_points WHERE projectId = ? AND name LIKE ? ORDER BY rowid', [projectId, q]);
+}
+
+export async function replaceKnown(projectId: string, pts: Array<Omit<KnownPoint, 'id' | 'projectId'>>): Promise<void> {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM known_points WHERE projectId = ?', [projectId]);
+    for (const p of pts) {
+      await db.runAsync('INSERT INTO known_points (id, projectId, name, north, east, height) VALUES (?, ?, ?, ?, ?, ?)',
+        [uid(), projectId, p.name, p.north, p.east, p.height]);
+    }
+  });
+}
+
+export async function countKnown(projectId: string): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) AS c FROM known_points WHERE projectId = ?', [projectId]);
+  return row?.c ?? 0;
 }

@@ -43,6 +43,9 @@ export default function WorkScreen() {
 
       <Text style={styles.groupTitle}>Съёмка</Text>
       <View style={styles.grid}>
+        <Tile label="Приёмник" icon="bluetooth" onPress={() => router.push('/receiver')} />
+        <Tile label="Калибровка" icon="locate" onPress={() => router.push('/calibration')} />
+        <Tile label="Подложка DXF" icon="map" onPress={() => router.push('/basemap')} />
         <Tile label="Съёмка точек" icon="pin" badge={String(nPoints)}
           onPress={() => router.push('/survey')} />
         <Tile label="Съёмка линии" icon="analytics" badge={String(nLines)}

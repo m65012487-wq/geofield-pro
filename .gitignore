@@ -4,3 +4,9 @@
 
 expo-env.d.ts
 # @end expo-cli
+node_modules/
+.expo/
+android/
+ios/
+*.apk
+build.log
