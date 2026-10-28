@@ -11,11 +11,15 @@ export default function SettingsScreen() {
   const [epochs, setEpochs] = useState('2');
   const [accLimit, setAccLimit] = useState('0.05');
   const [tilt, setTilt] = useState(false);
+  const [volKey, setVolKey] = useState(true);
+  const [floatBtn, setFloatBtn] = useState(true);
 
   useFocusEffect(useCallback(() => {
     kvGet('avgEpochs').then((v) => v && setEpochs(v));
     kvGet('accLimit').then((v) => v && setAccLimit(v));
     kvGet('tiltByReceiver').then((v) => setTilt(v === '1'));
+    kvGet('volumeShutter').then((v) => setVolKey(v !== '0'));
+    kvGet('floatShutter').then((v) => setFloatBtn(v !== '0'));
   }, []));
 
   const save = async () => {
@@ -24,6 +28,8 @@ export default function SettingsScreen() {
     await kvSet('avgEpochs', String(e));
     await kvSet('accLimit', String(a));
     await kvSet('tiltByReceiver', tilt ? '1' : '0');
+    await kvSet('volumeShutter', volKey ? '1' : '0');
+    await kvSet('floatShutter', floatBtn ? '1' : '0');
     setEpochs(String(e));
     setAccLimit(String(a));
     Alert.alert('Сохранено', `Эпох на точку: ${e}\nДопуск σ: ${a} м\nВеха: ${tilt ? 'учитывает приёмник' : 'вычитает программа'}`);
@@ -54,6 +60,21 @@ export default function SettingsScreen() {
           уже на острие вехи и программа веху не вычитает. Выключено — вешку держать по уровню, высота вехи
           вычитается программой. Проверка: острие на месте, наклонить вешку на 20–30° — если координаты почти
           не меняются, компенсация работает.
+        </Text>
+        <View style={styles.switchRow}>
+          <Text style={[shared.label, { flex: 1, marginTop: 0 }]}>Клавиша «громкость −» снимает точку</Text>
+          <Switch value={volKey} onValueChange={setVolKey} />
+        </View>
+        <Text style={styles.hintText}>
+          На экранах «Съёмка» и «Карта» (Android): снимает текущий объект, повторное нажатие во время
+          измерения — отмена. На других экранах клавиша работает как обычно.
+        </Text>
+        <View style={styles.switchRow}>
+          <Text style={[shared.label, { flex: 1, marginTop: 0 }]}>Плавающая кнопка «Измерить»</Text>
+          <Switch value={floatBtn} onValueChange={setFloatBtn} />
+        </View>
+        <Text style={styles.hintText}>
+          Круглая кнопка поверх «Съёмки» и «Карты»: нажать — снять, потащить пальцем — переставить в удобное место.
         </Text>
         <Button label="Сохранить" onPress={save} style={{ marginTop: space.lg }} />
       </Card>

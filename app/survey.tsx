@@ -7,6 +7,8 @@ import * as Haptics from 'expo-haptics';
 import { colors, space, font, radius } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button, QualityBadge } from '../src/components/ui';
+import { FloatingShutter } from '../src/components/FloatingShutter';
+import { useShutter } from '../src/lib/useShutter';
 import { SurveyCanvas } from '../src/components/SurveyCanvas';
 import { MapCanvas, type MapPoint } from '../src/components/MapCanvas';
 import { loadBasemap, type Basemap } from '../src/lib/basemap';
@@ -62,6 +64,9 @@ export default function SurveyScreen() {
   const [codePicker, setCodePicker] = useState(false);
   const [antEdit, setAntEdit] = useState<string | null>(null);
   const [numEdit, setNumEdit] = useState<{ code: string; value: string } | null>(null);
+  // текущий объект для плавающей кнопки и клавиши громкости — общий с «Картой»
+  const [curCode, setCurCode] = useState<string | null>(null);
+  const [floatOn, setFloatOn] = useState(true);
 
   const load = useCallback(() => {
     if (!project) return;
@@ -75,6 +80,8 @@ export default function SurveyScreen() {
     kvGet('tiltByReceiver').then((v) => setTiltByReceiver(v === '1'));
     kvGet('accLimit').then((v) => v && setAccLimit(parseFloat(v) || 0.05));
     kvGet('antennaHeight').then((v) => v && setAntH(parseFloat(v)));
+    kvGet('mapCode').then((v) => v && setCurCode(v));
+    kvGet('floatShutter').then((v) => setFloatOn(v !== '0'));
     loadBasemap(project.id).then(setBasemap);
   }, [project?.id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -96,6 +103,7 @@ export default function SurveyScreen() {
       Alert.alert('Нет решения', 'Нет данных от приёмника.');
       return;
     }
+    if (code) { setCurCode(code); kvSet('mapCode', code); }
     const go = (any: boolean) => {
       lastTs.current = p.timestamp;
       setSamples([]);
@@ -196,6 +204,13 @@ export default function SurveyScreen() {
     ]);
   };
 
+  const shoot = () => {
+    if (sampling) { cancel(); return; }
+    if (!curCode || !codes.some((c) => c.code === curCode)) { Alert.alert('Нет объекта', 'Нажмите плитку объекта — дальше кнопка и клавиша громкости снимают тот же объект.'); return; }
+    begin(curCode);
+  };
+  useShutter(shoot);
+
   if (!project) {
     return (
       <View style={[shared.container, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -290,6 +305,14 @@ export default function SurveyScreen() {
           variant={sampling ? 'danger' : 'secondary'}
         />
       </View>
+
+      {floatOn && (() => {
+        const cc = codes.find((c) => c.code === curCode);
+        return (
+          <FloatingShutter color={cc?.color ?? colors.accent} running={sampling != null} onPress={shoot}
+            label={sampling ? `${samples.length}/${avgEpochs}` : cc ? nextNames[cc.code] ?? cc.code : '—'} />
+        );
+      })()}
 
       {/* Форма: ручное сохранение или правка последней */}
       <Modal visible={saving || editing != null} transparent animationType="slide"

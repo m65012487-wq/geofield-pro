@@ -1,9 +1,17 @@
 {
-  "platforms": ["android", "apple"],
+  "platforms": [
+    "android",
+    "apple"
+  ],
   "android": {
-    "modules": ["expo.modules.gnssbt.GnssBtModule"]
+    "modules": [
+      "expo.modules.gnssbt.GnssBtModule",
+      "expo.modules.gnssbt.HwKeysModule"
+    ]
   },
   "apple": {
-    "modules": ["GnssBtModule"]
+    "modules": [
+      "GnssBtModule"
+    ]
   }
 }

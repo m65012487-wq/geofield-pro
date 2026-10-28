@@ -50,7 +50,8 @@
           "resizeMode": "contain"
         }
       ],
-      "./plugins/withMavenMirror"
+      "./plugins/withMavenMirror",
+      "./plugins/withVolumeKey"
     ],
     "experiments": {
       "typedRoutes": true

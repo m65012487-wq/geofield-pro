@@ -19,3 +19,11 @@ interface GnssBtNative {
 
 /** null в Expo Go и в вебе — там приёмника нет, работает только GPS телефона. */
 export const GnssBt = requireOptionalNativeModule<GnssBtNative>('GnssBt');
+
+interface HwKeysNative {
+  setEnabled(on: boolean): void;
+  addListener(event: 'onKey', cb: (e: { key: string }) => void): EventSubscription;
+}
+
+/** Клавиша «громкость −» как спуск съёмки. Только Android; на iOS и в Expo Go — null. */
+export const HwKeys = requireOptionalNativeModule<HwKeysNative>('HwKeys');

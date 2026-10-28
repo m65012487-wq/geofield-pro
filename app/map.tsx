@@ -5,6 +5,8 @@ import * as Haptics from 'expo-haptics';
 import { colors, space, font, radius } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button, QualityBadge } from '../src/components/ui';
+import { FloatingShutter } from '../src/components/FloatingShutter';
+import { useShutter } from '../src/lib/useShutter';
 import { MapCanvas, type MapKnown, type MapPoint } from '../src/components/MapCanvas';
 import { useGnss } from '../src/lib/useGnss';
 import { useActiveProject } from '../src/lib/useActiveProject';
@@ -41,6 +43,7 @@ export default function MapScreen() {
   const [layers, setLayers] = useState({ labels: true, known: true, points: true });
   const [layersOpen, setLayersOpen] = useState(false);
   const [info, setInfo] = useState<{ title: string; lines: string[] } | null>(null);
+  const [floatOn, setFloatOn] = useState(true);
   const pole = tiltByReceiver ? 0 : antH;
 
   const load = useCallback(() => {
@@ -57,6 +60,7 @@ export default function MapScreen() {
     kvGet('tiltByReceiver').then((v) => setTiltByReceiver(v === '1'));
     kvGet('avgEpochs').then((v) => v && setEpochs(parseInt(v, 10) || 2));
     kvGet('accLimit').then((v) => v && setAccLimit(parseFloat(v) || 0.05));
+    kvGet('floatShutter').then((v) => setFloatOn(v !== '0'));
     kvGet('mapLayers').then((v) => { if (v) try { setLayers(JSON.parse(v)); } catch { /* по умолчанию */ } });
   }, [project?.id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -107,6 +111,8 @@ export default function MapScreen() {
     }
     avg.start(false);
   };
+
+  useShutter(measure);
 
   const pickCode = (c: string) => { setCode(c); kvSet('mapCode', c); };
 
@@ -203,6 +209,11 @@ export default function MapScreen() {
           </Text>
         </Pressable>
       </View>
+
+      {floatOn && (
+        <FloatingShutter color={cur?.color ?? colors.accent} running={avg.running} onPress={measure}
+          label={avg.running ? `${avg.count}/${epochs}` : code ? nextNames[code] ?? code : '—'} />
+      )}
 
       {/* слои */}
       <Modal visible={layersOpen} transparent animationType="slide" onRequestClose={() => setLayersOpen(false)}>
