@@ -234,7 +234,7 @@ export default function SurveyScreen() {
       <ScrollView contentContainerStyle={{ padding: space.md, paddingBottom: 110 }}>
         <View onLayout={(e) => setCanvasW(e.nativeEvent.layout.width)} style={{ marginBottom: space.md }}>
           {canvasW > 0 && (calib?.cal || basemap ? (
-            <MapCanvas width={canvasW} height={CANVAS_H + 80} basemap={basemap}
+            <MapCanvas compact width={canvasW} height={CANVAS_H + 80} basemap={basemap}
               here={live ? { north: live.north, east: live.east } : null}
               points={points.flatMap<MapPoint>((p) => {
                 const l = p.north != null && p.east != null ? { north: p.north, east: p.east } : localOf(calib, p.latitude, p.longitude, p.elevation);

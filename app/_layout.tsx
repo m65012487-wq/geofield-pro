@@ -48,6 +48,7 @@ export default function RootLayout() {
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="survey" options={{ title: 'Съёмка точек' }} />
+          <Stack.Screen name="map" options={{ title: 'Карта' }} />
           <Stack.Screen name="survey-feature" options={{ title: 'Съёмка объекта' }} />
           <Stack.Screen name="points" options={{ title: 'БД точек' }} />
           <Stack.Screen name="features" options={{ title: 'Линии и полигоны' }} />

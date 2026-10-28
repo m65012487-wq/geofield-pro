@@ -43,6 +43,7 @@ export default function WorkScreen() {
 
       <Text style={styles.groupTitle}>Съёмка</Text>
       <View style={styles.grid}>
+        <Tile label="Карта" icon="map-outline" onPress={() => router.push('/map')} />
         <Tile label="Приёмник" icon="bluetooth" onPress={() => router.push('/receiver')} />
         <Tile label="Калибровка" icon="locate" onPress={() => router.push('/calibration')} />
         <Tile label="Подложка DXF" icon="map" onPress={() => router.push('/basemap')} />
