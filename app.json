@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "GeoField Pro",
+    "slug": "geofield-pro",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "geofieldpro",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0E14"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.geofieldpro.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "GeoField Pro использует геолокацию для съёмки точек.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "GeoField Pro использует геолокацию для съёмки точек."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0E14"
+      },
+      "package": "com.geofieldpro.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GeoField Pro использует геолокацию для съёмки точек."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0E14",
+          "image": "./assets/splash.png",
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
