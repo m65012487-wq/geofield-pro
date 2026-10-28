@@ -30,7 +30,7 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "BLUETOOTH_CONNECT"
       ]
     },
     "plugins": [
@@ -48,7 +48,8 @@
           "image": "./assets/splash.png",
           "resizeMode": "contain"
         }
-      ]
+      ],
+      "./plugins/withMavenMirror"
     ],
     "experiments": {
       "typedRoutes": true
