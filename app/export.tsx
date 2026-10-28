@@ -5,8 +5,12 @@ import { colors, space, font } from '../src/theme/theme';
 import { shared } from '../src/theme/shared';
 import { Button, Card } from '../src/components/ui';
 import { useActiveProject } from '../src/lib/useActiveProject';
-import { listPoints, listFeatures } from '../src/db/database';
+import { listPoints, listFeatures, kvGet, listCodes } from '../src/db/database';
 import { exportPointsCsv, exportGeoJson, exportLocalTxt } from '../src/lib/exporter';
+import { sendDay } from '../src/lib/roadExport';
+import { loadRoad } from '../src/lib/road';
+import { loadRoadSettings } from '../src/lib/roadCheck';
+import { loadShotSettings } from '../src/lib/useShot';
 import type { SurveyPoint, Feature } from '../src/db/types';
 
 /** Экспорт проекта: CSV точек и GeoJSON (точки + линии + полигоны). */
@@ -14,7 +18,22 @@ export default function ExportScreen() {
   const { project } = useActiveProject();
   const [points, setPoints] = useState<SurveyPoint[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
-  const [busy, setBusy] = useState<'csv' | 'geojson' | 'txt' | null>(null);
+  const [busy, setBusy] = useState<'csv' | 'geojson' | 'txt' | 'day' | null>(null);
+
+  const day = async () => {
+    if (!project) return;
+    setBusy('day');
+    try {
+      const [road, set, shot, codes, vc] = await Promise.all([
+        loadRoad(project.id), loadRoadSettings(), loadShotSettings(), listCodes(), kvGet('volCodes')]);
+      const msg = await sendDay(project, points, road, codes, shot.seq, set, vc ? vc.split(',') : ['OTK', 'KUV', 'OBL', 'OBP']);
+      Alert.alert('Отправлено', msg);
+    } catch (e) {
+      Alert.alert('Не получилось', e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const load = useCallback(() => {
     if (!project) return;
@@ -59,6 +78,15 @@ export default function ExportScreen() {
         <Text style={styles.stats}>
           {points.length} точек · {nLines} линий · {nPolys} полигонов
         </Text>
+      </Card>
+
+      <Card style={{ marginTop: space.lg }}>
+        <Text style={styles.fmtTitle}>За сегодня — одной кнопкой</Text>
+        <Text style={styles.fmtDesc}>
+          Точки за день: каталог NEH, ведомость по пикетам и схема DXF (если загружена трасса). С ботом из настроек
+          уходят прямо в Telegram, без бота — через «Поделиться».
+        </Text>
+        <Button label="Отправить за сегодня ➤" onPress={day} loading={busy === 'day'} style={{ marginTop: space.md }} />
       </Card>
 
       <Card style={{ marginTop: space.lg }}>

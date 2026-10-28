@@ -18,6 +18,8 @@ export default function SettingsScreen() {
   const [waitFix, setWaitFix] = useState(true);
   const [seq, setSeq] = useState(DEFAULT_SEQ);
   const [autoStep, setAutoStep] = useState('5');
+  const [tgToken, setTgToken] = useState('');
+  const [tgChat, setTgChat] = useState('');
 
   useFocusEffect(useCallback(() => {
     kvGet('avgEpochs').then((v) => v && setEpochs(v));
@@ -29,7 +31,25 @@ export default function SettingsScreen() {
     kvGet('waitFix').then((v) => setWaitFix(v !== '0'));
     kvGet('shotSeq').then((v) => v && setSeq(v));
     kvGet('autoStep').then((v) => v && setAutoStep(v));
+    kvGet('tgToken').then((v) => setTgToken(v ?? ''));
+    kvGet('tgChat').then((v) => setTgChat(v ?? ''));
   }, []));
+
+  const saveTg = async (test: boolean) => {
+    await kvSet('tgToken', tgToken.trim());
+    await kvSet('tgChat', tgChat.trim());
+    if (!test) { Alert.alert('Сохранено', tgToken.trim() ? 'Кнопка «За сегодня» шлёт файлы ботом.' : 'Бот выключен — файлы через «Поделиться».'); return; }
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${tgToken.trim()}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: tgChat.trim(), text: 'GeoField Pro: связь с ботом есть' }),
+      });
+      const j = await res.json() as { ok?: boolean; description?: string };
+      Alert.alert(j.ok ? 'Работает' : 'Ошибка', j.ok ? 'Сообщение отправлено в чат.' : j.description ?? String(res.status));
+    } catch (e) {
+      Alert.alert('Нет связи', e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const save = async () => {
     const e = Math.max(1, Math.min(60, parseInt(epochs, 10) || 2));
@@ -126,6 +146,24 @@ export default function SettingsScreen() {
           Число эпох для каждого объекта — в «Работа → Коды».
         </Text>
         <Button label="Сохранить" onPress={save} style={{ marginTop: space.lg }} />
+      </Card>
+
+      <Card style={{ marginTop: space.lg }}>
+        <Text style={styles.cardTitle}>Отправка в Telegram</Text>
+        <Text style={shared.label}>Токен бота</Text>
+        <TextInput style={shared.input} value={tgToken} onChangeText={setTgToken} autoCapitalize="none"
+          autoCorrect={false} secureTextEntry placeholder="123456:ABC…" placeholderTextColor={colors.textMuted} />
+        <Text style={shared.label}>ID чата</Text>
+        <TextInput style={shared.input} value={tgChat} onChangeText={setTgChat} autoCapitalize="none"
+          keyboardType="numbers-and-punctuation" placeholder="например 123456789" placeholderTextColor={colors.textMuted} />
+        <Text style={styles.hintText}>
+          «Экспорт → За сегодня» и «Ведомость → За сегодня» шлют файлы этим ботом в этот чат. Пусто — через «Поделиться».
+          Боту нужно сначала написать в чате /start.
+        </Text>
+        <View style={{ flexDirection: 'row', gap: space.md, marginTop: space.md }}>
+          <Button label="Проверить" variant="secondary" style={{ flex: 1 }} onPress={() => saveTg(true)} />
+          <Button label="Сохранить" style={{ flex: 1 }} onPress={() => saveTg(false)} />
+        </View>
       </Card>
 
       <Card style={{ marginTop: space.lg }}>

@@ -21,6 +21,8 @@ import {
 } from '../src/db/database';
 import type { SurveyPoint, Feature, FeatureCode, LivePosition, FixQuality } from '../src/db/types';
 import { useCalibration, localOf } from '../src/lib/calibStore';
+import { useRoad } from '../src/lib/roadCheck';
+import { liveRoadText } from '../src/lib/road';
 
 const CANVAS_H = 220;
 
@@ -35,6 +37,7 @@ export default function SurveyScreen() {
   const gnss = useGnss();
   const { position } = gnss;
   const calib = useCalibration(project?.id);
+  const road = useRoad(project?.id);
 
   const [points, setPoints] = useState<SurveyPoint[]>([]);
   const [features, setFeatures] = useState<Feature[]>([]);
@@ -101,6 +104,7 @@ export default function SurveyScreen() {
       latitude: avg.latitude, longitude: avg.longitude, elevation: avg.elevation,
       quality: avg.quality, hAccuracy: avg.hAccuracy, vAccuracy: avg.vAccuracy,
       epochs: avgN, note: ptNote.trim(), north: loc?.north ?? null, east: loc?.east ?? null, height: loc?.height ?? null,
+      stage: shot.stage,
     });
     setSaving(false); setAvg(null);
     load();
@@ -154,7 +158,7 @@ export default function SurveyScreen() {
           </Text>
           <Text style={styles.statusSub} numberOfLines={1}>
             {live
-              ? `N ${live.north.toFixed(3)}  E ${live.east.toFixed(3)}  H ${live.height.toFixed(3)}`
+              ? (road ? liveRoadText(road, live) : `N ${live.north.toFixed(3)}  E ${live.east.toFixed(3)}  H ${live.height.toFixed(3)}`)
               : `${gnss.deviceName ?? 'Приёмник не выбран'} · без калибровки (WGS84)`}
           </Text>
         </View>

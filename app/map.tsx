@@ -12,6 +12,8 @@ import { useActiveProject } from '../src/lib/useActiveProject';
 import { useShot } from '../src/lib/useShot';
 import { ShotModes } from '../src/components/ShotModes';
 import { useCalibration, localOf } from '../src/lib/calibStore';
+import { useRoad } from '../src/lib/roadCheck';
+import { liveRoadText } from '../src/lib/road';
 import { loadBasemap, saveBasemap, type Basemap } from '../src/lib/basemap';
 import {
   listPoints, listCodes, listKnown, kvGet, kvSet, nextNamesForCodes,
@@ -28,6 +30,7 @@ export default function MapScreen() {
   const gnss = useGnss();
   const { position } = gnss;
   const calib = useCalibration(project?.id);
+  const road = useRoad(project?.id);
 
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [points, setPoints] = useState<SurveyPoint[]>([]);
@@ -166,6 +169,7 @@ export default function MapScreen() {
           <Cell l="H" v={live ? live.height.toFixed(3) : '—'} />
           <Cell l="до посл." v={dLast != null ? `${dLast.toFixed(2)} м` : '—'} />
         </View>
+        {road && live && <Text style={styles.pk} numberOfLines={1}>{liveRoadText(road, live)}</Text>}
         <Pressable onPress={shot.trigger}
           style={({ pressed }) => [styles.measure, { backgroundColor: shot.running ? colors.dangerBg : cur?.color ?? colors.accent, opacity: pressed ? 0.85 : 1 }]}>
           <Text style={[styles.measureT, shot.running && { color: colors.danger }]}>
@@ -259,6 +263,7 @@ const styles = StyleSheet.create({
   cell: { flex: 1 },
   cellL: { color: colors.textMuted, fontSize: font.caption },
   cellV: { color: colors.textPrimary, fontSize: font.body, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  pk: { color: colors.accent, fontSize: font.body, fontWeight: '800', fontVariant: ['tabular-nums'] },
   measure: { minHeight: 56, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   measureT: { color: '#0A0E14', fontSize: font.bodyLg, fontWeight: '900' },
   layerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },

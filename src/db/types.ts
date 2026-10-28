@@ -30,6 +30,8 @@ export interface SurveyPoint {
   north?: number | null;
   east?: number | null;
   height?: number | null;
+  /** Этап съёмки для толщины и объёмов: '' — обычная, 'до' — до работ, 'после' — после. */
+  stage?: string;
 }
 
 /** Пункт с известными местными координатами (репер ГРО) — для калибровки и выноса. */

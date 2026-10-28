@@ -55,6 +55,12 @@ export default function WorkScreen() {
           onPress={() => router.push({ pathname: '/survey-feature', params: { type: 'polygon' } })} />
       </View>
 
+      <Text style={styles.groupTitle}>Дорога</Text>
+      <View style={styles.grid}>
+        <Tile label="Трасса" icon="trail-sign" onPress={() => router.push('/road')} />
+        <Tile label="Ведомость" icon="list" onPress={() => router.push('/vedomost')} />
+      </View>
+
       <Text style={styles.groupTitle}>Вынос</Text>
       <View style={styles.grid}>
         <Tile label="Вынос точек" icon="flag"

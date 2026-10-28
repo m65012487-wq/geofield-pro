@@ -86,6 +86,7 @@ export async function initDatabase(): Promise<void> {
   for (const c of ['north', 'east', 'height']) {
     if (!cols.some((x) => x.name === c)) await db.execAsync(`ALTER TABLE points ADD COLUMN ${c} REAL`);
   }
+  if (!cols.some((x) => x.name === 'stage')) await db.execAsync("ALTER TABLE points ADD COLUMN stage TEXT NOT NULL DEFAULT ''");
   // Заполняем библиотеку кодов при первом запуске
   const row = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) AS c FROM codes');
   if ((row?.c ?? 0) === 0) {
@@ -191,17 +192,17 @@ export async function addPoint(p: Omit<SurveyPoint, 'id' | 'createdAt'>): Promis
   const db = await getDb();
   const point: SurveyPoint = { ...p, id: uid(), createdAt: Date.now() };
   await db.runAsync(
-    `INSERT INTO points (id, projectId, name, code, latitude, longitude, elevation, quality, hAccuracy, vAccuracy, epochs, note, createdAt, north, east, height)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO points (id, projectId, name, code, latitude, longitude, elevation, quality, hAccuracy, vAccuracy, epochs, note, createdAt, north, east, height, stage)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [point.id, point.projectId, point.name, point.code, point.latitude, point.longitude,
      point.elevation, point.quality, point.hAccuracy, point.vAccuracy, point.epochs, point.note, point.createdAt,
-     point.north ?? null, point.east ?? null, point.height ?? null]
+     point.north ?? null, point.east ?? null, point.height ?? null, point.stage ?? '']
   );
   await touchProject(point.projectId);
   return point;
 }
 
-export async function updatePoint(id: string, fields: Partial<Pick<SurveyPoint, 'name' | 'code' | 'note' | 'elevation' | 'north' | 'east' | 'height'>>): Promise<void> {
+export async function updatePoint(id: string, fields: Partial<Pick<SurveyPoint, 'name' | 'code' | 'note' | 'elevation' | 'north' | 'east' | 'height' | 'stage'>>): Promise<void> {
   const db = await getDb();
   const sets: string[] = [];
   const vals: (string | number)[] = [];

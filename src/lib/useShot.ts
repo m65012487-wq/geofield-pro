@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { addPoint, kvGet, kvSet, nextNameForCode } from '../db/database';
+import { addPoint, kvGet, kvSet, listPoints, nextNameForCode } from '../db/database';
 import type { FeatureCode, FixQuality, LivePosition } from '../db/types';
 import { localOf, type ProjectCalib } from './calibStore';
 import { beep, say, spokenName } from './feedback';
 import { useStillness } from './useStillness';
+import { loadRoad, roadCached } from './road';
+import { analyse, loadRoadSettings, rowSummary, slopeAfterShot, type RoadSettings } from './roadCheck';
+
+export const STAGES = ['', 'до', 'после'] as const;
+
+/** Что сказать об отклонении: «выше на 12 миллиметров». */
+function spokenDh(dh: number, ok: boolean | null) {
+  const v = Math.round(Math.abs(dh));
+  const t = v === 0 ? 'в проекте' : `${dh > 0 ? 'выше' : 'ниже'} на ${v} мм`;
+  return ok === false ? `${t}, вне допуска` : t;
+}
 
 const QUALITY_RANK: Record<FixQuality, number> = { fix: 3, float: 2, single: 1, none: 0 };
 
@@ -65,21 +76,30 @@ export function useShot(position: LivePosition | null, cfg: Cfg) {
   const [autoOn, setAutoOn] = useState(false);
   const [stillOn, setStillOn] = useState(false);
   const [shot, setShot] = useState<{ code: string | null; need: number; any: boolean } | null>(null);
+  const [stage, setStageState] = useState('');
+  const [roadSet, setRoadSet] = useState<RoadSettings | null>(null);
+  /** Итог последней точки по трассе: пикет, смещение, отклонение, уклоны. */
+  const [lastInfo, setLastInfo] = useState<{ name: string; text: string; bad: boolean } | null>(null);
   const [samples, setSamples] = useState<LivePosition[]>([]);
   const lastTs = useRef(0);
   const lastAuto = useRef<{ x: number; y: number } | null>(null);
   const busy = useRef(false);
 
   // свежие значения для обработчиков событий (клавиша, датчик, таймеры)
-  const live = useRef({ position, cfg, settings, cur, seqOn, shot });
-  live.current = { position, cfg, settings, cur, seqOn, shot };
+  const live = useRef({ position, cfg, settings, cur, seqOn, shot, stage, roadSet });
+  live.current = { position, cfg, settings, cur, seqOn, shot, stage, roadSet };
 
   useFocusEffect(useCallback(() => {
     loadShotSettings().then(setSettings);
     kvGet('mapCode').then((v) => v && setCurState(v));
     kvGet('shotSeqOn').then((v) => setSeqOn(v === '1'));
+    loadRoadSettings().then(setRoadSet);
+    if (cfg.projectId) {
+      loadRoad(cfg.projectId);
+      kvGet(`stage:${cfg.projectId}`).then((v) => setStageState(v ?? ''));
+    }
     return () => { setAutoOn(false); setStillOn(false); };
-  }, []));
+  }, [cfg.projectId]));
 
   const setCur = (c: string) => { setCurState(c); kvSet('mapCode', c); };
   const desc = (code: string) => live.current.cfg.codes.find((c) => c.code === code)?.description || code;
@@ -93,7 +113,7 @@ export function useShot(position: LivePosition | null, cfg: Cfg) {
   };
 
   const save = async (code: string, r: LivePosition, n: number, auto: boolean) => {
-    const { cfg: c, settings: s, seqOn: sOn } = live.current;
+    const { cfg: c, settings: s, seqOn: sOn, stage: stg, roadSet: rs } = live.current;
     if (!c.projectId || !s) return;
     const write = async () => {
       busy.current = true;
@@ -106,6 +126,7 @@ export function useShot(position: LivePosition | null, cfg: Cfg) {
           latitude: r.latitude, longitude: r.longitude, elevation: r.elevation,
           quality: r.quality, hAccuracy: r.hAccuracy, vAccuracy: r.vAccuracy,
           epochs: n, note: auto ? 'авто' : '', north: loc?.north ?? null, east: loc?.east ?? null, height: loc?.height ?? null,
+          stage: stg,
         });
         lastAuto.current = planar(r);
         beep('done');
@@ -116,7 +137,24 @@ export function useShot(position: LivePosition | null, cfg: Cfg) {
           if (cand && c.codes.some((x) => x.code === cand)) next = cand;
         }
         if (next !== code) setCur(next);
-        if (s.voice && !auto) say(spokenName(name, code, desc(code)) + (next !== code ? `. Дальше ${desc(next)}` : ''));
+        // пикет, отклонение от проекта и (на замыкании поперечника) уклоны
+        let extra = '';
+        const road = roadCached(c.projectId);
+        if (road && rs && loc) {
+          const rows = analyse(road, await listPoints(c.projectId!), rs);
+          const me = rows.find((x) => x.p.name === name);
+          if (me) {
+            const sl = s.seq.length >= 3 && code === s.seq[2] ? slopeAfterShot(rows, name, s.seq, rs) : null;
+            const slT = sl ? [sl.left, sl.right].map((x, k) => x ? `${k ? 'право' : 'лево'} ${x.fact.toFixed(0)}‰${x.design != null ? ` (пр. ${x.design.toFixed(0)})` : ''}${x.ok === false ? ' ✗' : ''}` : null).filter(Boolean).join(', ') : '';
+            const bad = me.ok === false || !!(sl && (sl.left?.ok === false || sl.right?.ok === false));
+            setLastInfo({ name, text: rowSummary(me) + (slT ? `
+Уклоны: ${slT}` : ''), bad });
+            if (bad) beep('bad');
+            if (me.dh != null) extra = `. ${spokenDh(me.dh, me.ok)}`;
+            if (sl) extra += `. Уклоны ${[sl.left, sl.right].map((x, k) => x ? `${k ? 'право' : 'лево'} ${Math.round(Math.abs(x.fact))}` : '').filter(Boolean).join(', ')} промилле`;
+          }
+        }
+        if (s.voice && !auto) say(spokenName(name, code, desc(code)) + extra + (next !== code ? `. Дальше ${desc(next)}` : ''));
         c.onSaved();
       } finally {
         busy.current = false;
@@ -216,6 +254,13 @@ export function useShot(position: LivePosition | null, cfg: Cfg) {
 
   useStillness(stillOn && !shot, () => { if (!live.current.shot) trigger(); });
 
+  const setStage = (v: string) => {
+    setStageState(v);
+    if (cfg.projectId) kvSet(`stage:${cfg.projectId}`, v);
+    if (settings?.voice) say(v ? `Съёмка ${v}` : 'Обычная съёмка');
+  };
+  const cycleStage = () => setStage(STAGES[(STAGES.indexOf(stage as typeof STAGES[number]) + 1) % STAGES.length]);
+
   const toggleSeq = () => {
     const v = !seqOn;
     setSeqOn(v);
@@ -245,6 +290,7 @@ export function useShot(position: LivePosition | null, cfg: Cfg) {
     waitingFix: shot != null && !shot.any && position?.quality !== 'fix',
     start, cancel, trigger,
     seqOn, toggleSeq, autoOn, toggleAuto, stillOn, toggleStill,
+    stage, setStage, cycleStage, lastInfo,
   };
 }
 

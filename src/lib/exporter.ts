@@ -6,11 +6,25 @@ function sanitize(name: string): string {
   return name.replace(/[^\wа-яА-ЯёЁ-]+/g, '_').slice(0, 40) || 'project';
 }
 
-async function writeAndShare(filename: string, content: string, mime: string): Promise<void> {
+export function sanitizeName(name: string) { return sanitize(name); }
+
+/** Файл во временной папке — для «Поделиться» и отправки в Telegram. */
+export function writeCacheFile(filename: string, content: string): File {
   const file = new File(Paths.cache, filename);
   if (file.exists) file.delete();
   file.create();
   file.write(content);
+  return file;
+}
+
+export async function shareFile(file: File, mime: string, title: string): Promise<void> {
+  const can = await Sharing.isAvailableAsync();
+  if (!can) throw new Error('Отправка файлов недоступна на этом устройстве');
+  await Sharing.shareAsync(file.uri, { mimeType: mime, dialogTitle: title });
+}
+
+async function writeAndShare(filename: string, content: string, mime: string): Promise<void> {
+  const file = writeCacheFile(filename, content);
   const can = await Sharing.isAvailableAsync();
   if (!can) throw new Error('Отправка файлов недоступна на этом устройстве');
   await Sharing.shareAsync(file.uri, { mimeType: mime, dialogTitle: filename });
@@ -37,14 +51,19 @@ export async function exportPointsCsv(project: Project, points: SurveyPoint[]): 
  * Каталог в местной системе в том же виде, что выгрузки съёмки объекта: «имя,N,E,H,код» —
  * открывается скриптами и AutoCAD-импортом без переделок. Точки без калибровки пропускаются.
  */
-export async function exportLocalTxt(project: Project, points: SurveyPoint[]): Promise<number> {
+export function localTxt(points: SurveyPoint[]): { text: string; count: number } {
   const rows = points.filter((p) => p.north != null && p.east != null && p.height != null)
     .sort((a, b) => a.createdAt - b.createdAt)
     .map((p) => `${p.name},${p.north!.toFixed(3)},${p.east!.toFixed(3)},${p.height!.toFixed(3)},${p.code}`);
-  if (!rows.length) throw new Error('Нет точек с местными координатами — сначала калибровка');
   const CRLF = String.fromCharCode(13, 10);
-  await writeAndShare(`${sanitize(project.name)}_NEH.txt`, rows.join(CRLF) + CRLF, 'text/plain');
-  return rows.length;
+  return { text: rows.length ? rows.join(CRLF) + CRLF : '', count: rows.length };
+}
+
+export async function exportLocalTxt(project: Project, points: SurveyPoint[]): Promise<number> {
+  const { text, count } = localTxt(points);
+  if (!count) throw new Error('Нет точек с местными координатами — сначала калибровка');
+  await writeAndShare(`${sanitize(project.name)}_NEH.txt`, text, 'text/plain');
+  return count;
 }
 
 /** Экспорт всего проекта в GeoJSON (точки + линии + полигоны). */

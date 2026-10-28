@@ -59,6 +59,8 @@ export default function RootLayout() {
           <Stack.Screen name="known" options={{ title: 'Реперы' }} />
           <Stack.Screen name="basemap" options={{ title: 'Подложка' }} />
           <Stack.Screen name="export" options={{ title: 'Экспорт' }} />
+          <Stack.Screen name="road" options={{ title: 'Трасса и допуски' }} />
+          <Stack.Screen name="vedomost" options={{ title: 'Ведомость по пикетам' }} />
           <Stack.Screen name="cogo/pgz" options={{ title: 'ПГЗ — прямая задача' }} />
           <Stack.Screen name="cogo/ogz" options={{ title: 'ОГЗ — обратная задача' }} />
           <Stack.Screen name="cogo/area" options={{ title: 'Площадь' }} />
