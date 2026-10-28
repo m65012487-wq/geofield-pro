@@ -12,11 +12,16 @@ on:
         description: "Bundle ID (в eSign его ещё можно поменять при подписи)"
         type: string
         default: com.geofieldpro.app
+      runner:
+        description: "Раннер macOS (если macos-15 не выдают — macos-14)"
+        type: choice
+        options: [macos-15, macos-14, macos-26]
+        default: macos-15
 
 jobs:
   ipa:
     name: Неподписанная сборка
-    runs-on: macos-15
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 60
 
     steps:
