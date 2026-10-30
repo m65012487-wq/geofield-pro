@@ -64,7 +64,7 @@ export default function RoadGuide() {
   const slope = mode === 'slope' && road && target && live ? slopeCheck(road, target, live, number(ratio), fill) : null;
   const ct = number(crossTol);
   const onSection = !!nav && Number.isFinite(ct) && ct > 0 && Math.abs(nav.along) <= ct;
-  const zone = (() => { try { return nav ? toleranceZone(nav.distance, bands.split(';').map(number)) : 3; } catch { return 3; } })();
+  const zone = (() => { try { return nav ? toleranceZone(mode === 'slope' ? Math.abs(slope?.dh ?? Infinity) : nav.distance, bands.split(';').map(number)) : 3; } catch { return 3; } })();
   useEffect(() => {
     const yes = mode !== 'slope' && zone === 0 && fresh && position?.quality === 'fix' && (mode === 'dxf' || onSection);
     if (yes && !hit.current) beep('done');
@@ -99,6 +99,7 @@ export default function RoadGuide() {
     if (!fresh || position.quality !== 'fix') return Alert.alert('Нужен FIX', 'Дождитесь свежего фиксированного решения');
     if (mode !== 'dxf' && !onSection) return Alert.alert('Вне сечения', 'Вернитесь в допуск вдоль оси');
     const storePoint = async () => {
+      if (Date.now() - position.timestamp >= 15000) return Alert.alert('Позиция устарела', 'Повторите контроль по свежему FIX');
       setSaving(true);
       try {
         const base = mode === 'dxf' ? 'DXF' : `ПК${fmtPk(target.s)}_${mode === 'slope' ? 'ОТК' : target.key}`;
@@ -148,7 +149,7 @@ export default function RoadGuide() {
       <QualityBadge quality={position?.quality ?? 'none'} />
       {!fresh && <Text style={styles.warning}>Нет свежей позиции</Text>}
       {nav && <>
-        <Text style={[styles.big, { color: ZCOL[zone] }]}>{nav.distance.toFixed(3)} м до цели</Text>
+        <Text style={[styles.big, { color: ZCOL[zone] }]}>{mode === 'slope' ? `Δ откоса ${slope ? (slope.dh * 100).toFixed(1) : '—'} см` : `${nav.distance.toFixed(3)} м до цели`}</Text>
         <Text style={styles.big}>{mode === 'dxf' ? 'На север' : 'Вперёд по оси'} {nav.along.toFixed(3)} м</Text>
         <Text style={styles.big}>{mode === 'dxf' ? 'На восток' : 'Вправо по оси'} {nav.right.toFixed(3)} м</Text>
         {mode !== 'dxf' && !onSection && <Text style={styles.warning}>Вне сечения: {Math.abs(nav.along).toFixed(2)} м вдоль оси</Text>}
