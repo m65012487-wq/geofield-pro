@@ -29,7 +29,7 @@ export default function BasemapScreen() {
       setBusy(true);
       const name = fileTitle(f.uri, 'план DXF');
       const parsed = parseDxf(await f.text(), name);
-      saveBasemap(project.id, parsed);
+      await saveBasemap(project.id, parsed);
       setBm(parsed);
       Alert.alert('Подложка загружена', `${name}: ${parsed.lines.length} линий, ${parsed.layers.length} слоёв`);
     } catch (e) {

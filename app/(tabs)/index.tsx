@@ -18,7 +18,7 @@ export default function ProjectsScreen() {
   const [modal, setModal] = useState(false);
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
-  const [crs, setCrs] = useState('WGS84 / UTM 37N');
+  const [crs, setCrs] = useState('Местная система (по калибровке)');
 
   const load = useCallback(() => {
     listProjects().then(setProjects);
@@ -82,6 +82,7 @@ export default function ProjectsScreen() {
         }}
       />
       <View style={styles.fabBar}>
+        <Button label="Загрузить данные / копию" variant="secondary" onPress={() => router.push('/project-data')} style={{ marginBottom: 8 }} />
         <Button label="+ Новый проект" onPress={() => setModal(true)} />
       </View>
 

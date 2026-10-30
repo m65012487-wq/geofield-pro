@@ -6,7 +6,7 @@ import { shared } from '../../src/theme/shared';
 import { Tile } from '../../src/components/Tile';
 import { Button } from '../../src/components/ui';
 import { useActiveProject } from '../../src/lib/useActiveProject';
-import { countPoints, countFeatures } from '../../src/db/database';
+import { countPoints, countFeatures, kvGet } from '../../src/db/database';
 import { ScreenHelp } from '../../src/components/Help';
 import { maybeAutoBackup } from '../../src/lib/backup';
 import { HELP } from '../../src/lib/helpTexts';
@@ -16,12 +16,14 @@ const T = HELP.tiles;
 export default function WorkScreen() {
   const router = useRouter();
   const { project } = useActiveProject();
+  const [roadTools, setRoadTools] = useState(true);
   const [nPoints, setNPoints] = useState(0);
   const [nLines, setNLines] = useState(0);
   const [nPolys, setNPolys] = useState(0);
 
   useFocusEffect(useCallback(() => {
     if (!project) return;
+    kvGet(`roadTools:${project.id}`).then(v => setRoadTools(v !== '0'));
     countPoints(project.id).then(setNPoints);
     countFeatures(project.id, 'line').then(setNLines);
     countFeatures(project.id, 'polygon').then(setNPolys);
@@ -47,6 +49,7 @@ export default function WorkScreen() {
         <Text style={styles.projectCrs}>{project.crs}</Text>
       </View>
 
+      <Button label="Данные проекта · загрузка и настройка" onPress={() => router.push('/project-data')} style={{ marginBottom: 16 }} />
       <ScreenHelp title="Работа" text={HELP.work} />
       <Text style={styles.groupTitle}>Съёмка</Text>
       <View style={styles.grid}>
@@ -64,6 +67,7 @@ export default function WorkScreen() {
           onPress={() => router.push({ pathname: '/survey-feature', params: { type: 'polygon' } })} />
       </View>
 
+      {roadTools && <>
       <Text style={styles.groupTitle}>Дорога</Text>
       <View style={styles.grid}>
         <Tile label="Трасса" icon="trail-sign" help={T.road} onPress={() => router.push('/road')} />
@@ -72,6 +76,7 @@ export default function WorkScreen() {
         <Tile label="Разбивка по оси" icon="git-commit-outline" help={T.roadStake} onPress={() => router.push('/road-stake')} />
       </View>
 
+      </>}
       <Text style={styles.groupTitle}>Инструменты</Text>
       <View style={styles.grid}>
         <Tile label="Труба" icon="water-outline" help={T.pipe} onPress={() => router.push('/pipe')} />

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, PanResponder, type GestureResponderEvent } from 'react-native';
-import Svg, { Circle, G, Line, Polygon, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { Path, Circle, G, Line, Polygon, Polyline, Text as SvgText } from 'react-native-svg';
 import { colors, font, radius } from '../theme/theme';
 import type { Basemap } from '../lib/basemap';
 
@@ -77,6 +77,17 @@ export function MapCanvas({
   const hitRef = useRef<(x: number, y: number) => void>(() => {});
   const start = useRef({ n: 0, e: 0, mpp: 1, dist: 0, moved: false, x: 0, y: 0 });
 
+  const pendingView = useRef<typeof view | null>(null);
+  const frame = useRef<number | null>(null);
+  const queueView = (v: typeof view) => {
+    pendingView.current=v;
+    if(frame.current == null) frame.current=requestAnimationFrame(() => {
+      frame.current=null;
+      if(pendingView.current) setView(pendingView.current);
+    });
+  };
+  useEffect(() => () => { if(frame.current != null) cancelAnimationFrame(frame.current); }, []);
+
   const pan = useMemo(() => {
     const dist = (e: GestureResponderEvent) => {
       const t = e.nativeEvent.touches;
@@ -98,14 +109,14 @@ export function MapCanvas({
         if (d > 0) {
           if (s.dist === 0) { s.dist = d; s.mpp = cRef.current.mpp; s.n = cRef.current.n; s.e = cRef.current.e; return; }
           s.moved = true;
-          setView({ n: s.n, e: s.e, mpp: clampMpp(s.mpp * s.dist / d) });
+          queueView({ n: s.n, e: s.e, mpp: clampMpp(s.mpp * s.dist / d) });
           if (!Number.isNaN(s.n)) setFollow(false);
           return;
         }
         if (Math.abs(g.dx) + Math.abs(g.dy) < 6 && !s.moved) return;
         s.moved = true;
         setFollow(false);
-        setView({ n: s.n + g.dy * s.mpp, e: s.e - g.dx * s.mpp, mpp: s.mpp });
+        queueView({ n: s.n + g.dy * s.mpp, e: s.e - g.dx * s.mpp, mpp: s.mpp });
       },
       onPanResponderRelease: () => {
         const s = start.current;
@@ -136,33 +147,34 @@ export function MapCanvas({
     if (best) tapRef.current(best.p, best.kind);
   };
 
-  // видимые линии подложки: отбор по рамке, прореживание вершин мельче 1.5 px
+  // Границы геометрии считаются один раз при загрузке, а не на каждом кадре жеста.
+  const indexedLines = useMemo(() => basemap?.lines.map((l, idx) => {
+    let minE=Infinity,minN=Infinity,maxE=-Infinity,maxN=-Infinity;
+    for(let k=0;k<l.pts.length;k+=2) {
+      minE=Math.min(minE,l.pts[k]); maxE=Math.max(maxE,l.pts[k]);
+      minN=Math.min(minN,l.pts[k+1]); maxN=Math.max(maxN,l.pts[k+1]);
+    }
+    return {l,idx,minE,minN,maxE,maxN};
+  }) ?? [], [basemap?.lines]);
+
   const visible = useMemo(() => {
     if (!basemap) return [];
-    const hw = width / 2 * mpp, hh = height / 2 * mpp;
-    const minE = c.e - hw, maxE = c.e + hw, minN = c.n - hh, maxN = c.n + hh;
-    const res: Array<{ key: number; color: string; d: string }> = [];
-    basemap.lines.forEach((l, idx) => {
-      const lay = basemap.layers[l.layer];
-      if (!lay?.visible) return;
-      let lo = Infinity, hiE = -Infinity, loN = Infinity, hiN = -Infinity;
-      for (let k = 0; k < l.pts.length; k += 2) {
-        lo = Math.min(lo, l.pts[k]); hiE = Math.max(hiE, l.pts[k]);
-        loN = Math.min(loN, l.pts[k + 1]); hiN = Math.max(hiN, l.pts[k + 1]);
+    const hw=width/2*mpp, hh=height/2*mpp;
+    const minE=c.e-hw,maxE=c.e+hw,minN=c.n-hh,maxN=c.n+hh;
+    const groups=new Map<number,string[]>();
+    for(const b of indexedLines) {
+      const l=b.l;
+      if(!basemap.layers[l.layer]?.visible || b.maxE<minE || b.minE>maxE || b.maxN<minN || b.minN>maxN) continue;
+      const parts:string[]=[]; let lx=NaN,ly=NaN;
+      for(let k=0;k<l.pts.length;k+=2) {
+        const x=width/2+(l.pts[k]-c.e)/mpp,y=height/2-(l.pts[k+1]-c.n)/mpp;
+        if(k>0 && k<l.pts.length-2 && Math.abs(x-lx)+Math.abs(y-ly)<1.5) continue;
+        parts.push(`${parts.length ? 'L':'M'}${x.toFixed(1)},${y.toFixed(1)}`);lx=x;ly=y;
       }
-      if (hiE < minE || lo > maxE || hiN < minN || loN > maxN) return;
-      const parts: string[] = [];
-      let lx = NaN, ly = NaN;
-      for (let k = 0; k < l.pts.length; k += 2) {
-        const x = width / 2 + (l.pts[k] - c.e) / mpp, y = height / 2 - (l.pts[k + 1] - c.n) / mpp;
-        if (k > 0 && k < l.pts.length - 2 && Math.abs(x - lx) + Math.abs(y - ly) < 1.5) continue;
-        parts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-        lx = x; ly = y;
-      }
-      res.push({ key: idx, color: lay.color, d: parts.join(' ') });
-    });
-    return res;
-  }, [basemap, c.e, c.n, mpp, width, height]);
+      const group=groups.get(l.layer) ?? [];group.push(parts.join(''));groups.set(l.layer,group);
+    }
+    return Array.from(groups,([key,paths])=>({key,color:basemap.layers[key].color,d:paths.join(' ')}));
+  },[basemap,indexedLines,c.e,c.n,mpp,width,height]);
 
   const inView = (x: number, y: number) => x > -20 && y > -20 && x < width + 20 && y < height + 20;
   const labels = showLabels && mpp <= 1.5;
@@ -180,7 +192,7 @@ export function MapCanvas({
     <View style={[styles.wrap, { width, height }]} {...pan.panHandlers}>
       <Svg width={width} height={height}>
         {visible.map((v) => (
-          <Polyline key={v.key} points={v.d} fill="none" stroke={v.color} strokeWidth={1.3} opacity={0.9} />
+          <Path key={v.key} d={v.d} fill="none" stroke={v.color} strokeWidth={1.3} opacity={0.9} />
         ))}
         {lines?.map((l, i) => {
           const d: string[] = [];
