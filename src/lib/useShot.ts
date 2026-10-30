@@ -98,7 +98,7 @@ export function useShot(position: LivePosition | null, cfg: Cfg) {
       loadRoad(cfg.projectId);
       kvGet(`stage:${cfg.projectId}`).then((v) => setStageState(v ?? ''));
     }
-    return () => { setAutoOn(false); setStillOn(false); };
+    return () => { setAutoOn(false); setStillOn(false); setShot(null); setSamples([]); };
   }, [cfg.projectId]));
 
   const setCur = (c: string) => { setCurState(c); kvSet('mapCode', c); };

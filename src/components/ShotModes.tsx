@@ -1,4 +1,5 @@
 import React from 'react';
+import { useRouter } from 'expo-router';
 import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { colors, space, font } from '../theme/theme';
 import type { ShotEngine } from '../lib/useShot';
@@ -10,11 +11,14 @@ import { HELP } from '../lib/helpTexts';
  * этап «до/после» (для толщины и объёмов); под ними — итог последней точки по трассе.
  */
 export function ShotModes({ shot }: { shot: ShotEngine }) {
+  const router = useRouter();
   const s = shot.settings;
   if (!s) return null;
   return (
     <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+        <Chip on={false} label="Профиль" onPress={() => { if (!shot.running) router.push('/profiles'); }} />
+        <Chip on={false} label="Повторный контроль" onPress={() => { if (!shot.running) router.push('/repeat-check'); }} />
         <Chip on={shot.seqOn} onPress={shot.toggleSeq} label={`⟳ ${s.seq.join('→')}`} />
         <Chip on={shot.autoOn} onPress={shot.toggleAuto} label={`Авто ${s.autoStep} м`} />
         <Chip on={shot.stillOn} onPress={shot.toggleStill} label="По остановке" />
