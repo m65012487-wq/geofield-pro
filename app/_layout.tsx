@@ -62,6 +62,7 @@ export default function RootLayout() {
           <Stack.Screen name="road" options={{ title: 'Трасса и допуски' }} />
           <Stack.Screen name="vedomost" options={{ title: 'Ведомость по пикетам' }} />
           <Stack.Screen name="road-stake" options={{ title: 'Разбивка по оси' }} />
+          <Stack.Screen name="road-guide" options={{ title: 'Вынос для дороги' }} />
           <Stack.Screen name="ntrip" options={{ title: 'Поправки NTRIP' }} />
           <Stack.Screen name="basecheck" options={{ title: 'Контроль на репере' }} />
           <Stack.Screen name="journal" options={{ title: 'Журнал дня' }} />

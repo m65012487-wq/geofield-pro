@@ -23,6 +23,10 @@ interface Props {
   onTapPoint?: (p: MapPoint | MapKnown, kind: 'point' | 'known') => void;
   /** Мельче кнопки — для карты, встроенной в экран съёмки. */
   compact?: boolean;
+  /** Выбор геометрии подложки: координата касания и размер метра на пиксель. */
+  onTapWorld?: (p: { north: number; east: number }, mpp: number) => void;
+  /** Приближать при подходе к цели, пока включено следование за позицией. */
+  autoApproach?: boolean;
   /** Линии по коду: pts — E0,N0,E1,N1,… в местных координатах. */
   lines?: Array<{ color: string; pts: number[] }>;
 }
@@ -36,12 +40,13 @@ const clampMpp = (v: number) => Math.min(MAX_MPP, Math.max(MIN_MPP, v));
  * реперы, позиция. Один палец — сдвиг, два — масштаб, касание точки — сведения о ней.
  */
 export function MapCanvas({
-  width, height, here, points, basemap, known = [], showLabels = true, showKnown = true, target, onTapPoint, compact, lines,
+  width, height, here, points, basemap, known = [], showLabels = true, showKnown = true, target, onTapPoint, compact, lines, onTapWorld, autoApproach,
 }: Props) {
   const fitAll = () => {
     const xs: number[] = [], ys: number[] = [];
     if (basemap) { xs.push(basemap.bbox[0], basemap.bbox[2]); ys.push(basemap.bbox[1], basemap.bbox[3]); }
     for (const p of points) { xs.push(p.east); ys.push(p.north); }
+    if (target) { xs.push(target.east); ys.push(target.north); }
     if (here) { xs.push(here.east); ys.push(here.north); }
     if (!xs.length) return { n: 0, e: 0, mpp: 0.5 };
     const minE = Math.min(...xs), maxE = Math.max(...xs), minN = Math.min(...ys), maxN = Math.max(...ys);
@@ -61,10 +66,12 @@ export function MapCanvas({
   }, [basemap, here != null, width, height]);
 
   const c = follow && here ? { n: here.north, e: here.east, mpp: view.mpp } : view;
-  const mpp = c.mpp;
+  const approachDist = here && target ? Math.hypot(here.north - target.north, here.east - target.east) : null;
+  const mpp = autoApproach && follow && approachDist != null
+    ? clampMpp(Math.max(0.01, approachDist * 2.5 / Math.max(1, Math.min(width, height)))) : c.mpp;
 
   // жесты: refs, чтобы PanResponder (создан один раз) видел свежие значения
-  const cRef = useRef(c); cRef.current = c;
+  const cRef = useRef(c); cRef.current = { ...c, mpp };
   const sizeRef = useRef({ width, height }); sizeRef.current = { width, height };
   const tapRef = useRef(onTapPoint); tapRef.current = onTapPoint;
   const hitRef = useRef<(x: number, y: number) => void>(() => {});
@@ -110,6 +117,10 @@ export function MapCanvas({
   const toPx = (e: number, n: number): [number, number] => [width / 2 + (e - c.e) / mpp, height / 2 - (n - c.n) / mpp];
 
   hitRef.current = (x, y) => {
+    if (onTapWorld) {
+      onTapWorld({ east: c.e + (x - width / 2) * mpp, north: c.n - (y - height / 2) * mpp }, mpp);
+      return;
+    }
     if (!tapRef.current) return;
     let best: { d: number; p: MapPoint | MapKnown; kind: 'point' | 'known' } | null = null;
     for (const p of points) {

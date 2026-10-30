@@ -68,6 +68,7 @@ export default function WorkScreen() {
       <View style={styles.grid}>
         <Tile label="Трасса" icon="trail-sign" help={T.road} onPress={() => router.push('/road')} />
         <Tile label="Ведомость" icon="list" help={T.vedomost} onPress={() => router.push('/vedomost')} />
+        <Tile label="Вынос сечения / DXF" icon="locate-outline" help="Выбор оси, кромки и бровки на пикете; вынос нижнего слоя; контроль откоса; привязки к линиям DXF. Подробная инструкция — кнопка ? внутри." onPress={() => router.push('/road-guide')} />
         <Tile label="Разбивка по оси" icon="git-commit-outline" help={T.roadStake} onPress={() => router.push('/road-stake')} />
       </View>
 
